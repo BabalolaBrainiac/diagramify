@@ -1,0 +1,78 @@
+{
+  "name": "diagramify",
+  "version": "0.1.0",
+  "description": "AI-powered Mermaid diagram generator. Analyzes codebases or descriptions → SVG, PNG, .mmd. Claude Code skill + CLI. Supports Claude, OpenAI, Gemini.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "diagramify": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist/",
+    "skills/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm run typecheck && npm run test"
+  },
+  "dependencies": {
+    "ai": "^4.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
+    "beautiful-mermaid": "latest",
+    "sharp": "^0.33.0",
+    "commander": "^12.0.0",
+    "express": "^4.18.0",
+    "fast-glob": "^3.3.0",
+    "ignore": "^5.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsup": "^8.0.0",
+    "vitest": "^1.6.0",
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.0",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "mermaid",
+    "diagram",
+    "architecture",
+    "flowchart",
+    "claude",
+    "openai",
+    "gemini",
+    "ai",
+    "svg",
+    "codebase",
+    "visualization",
+    "claude-code",
+    "skill"
+  ],
+  "license": "MIT",
+  "author": "Opeyemi Babalola",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/babalolaopeyemidaniel/diagramify"
+  }
+}
