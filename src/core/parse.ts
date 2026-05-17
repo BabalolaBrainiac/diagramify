@@ -33,7 +33,7 @@ export function parseMermaidSource(source: string): ParsedGraph {
   const edges: ParsedEdge[] = [];
   const subgraphs: ParsedSubgraph[] = [];
   const nodeMap = new Map<string, ParsedNode>();
-  const subgraphStack: { id: string; nodeIds: string[] }[] = [];
+  const subgraphStack: { id: string; label: string; nodeIds: string[] }[] = [];
   const idToNodeMap = new Map<string, string>();
 
   for (const line of lines) {
@@ -50,7 +50,7 @@ export function parseMermaidSource(source: string): ParsedGraph {
     if (subgraphStartMatch) {
       const subgraphId = subgraphStartMatch[1];
       const subgraphLabel = subgraphStartMatch[2] || subgraphId;
-      subgraphStack.push({ id: subgraphId, nodeIds: [] });
+      subgraphStack.push({ id: subgraphId, label: subgraphLabel, nodeIds: [] });
       continue;
     }
 
@@ -59,7 +59,7 @@ export function parseMermaidSource(source: string): ParsedGraph {
         const completed = subgraphStack.pop()!;
         subgraphs.push({
           id: completed.id,
-          label: completed.id,
+          label: completed.label,
           nodeIds: completed.nodeIds,
         });
       }
@@ -71,6 +71,36 @@ export function parseMermaidSource(source: string): ParsedGraph {
       const nodeId = nodeMatch[1];
       const label = nodeMatch[2];
       const shape: 'rect' = 'rect';
+      const node: ParsedNode = { id: nodeId, label, shape };
+      nodes.push(node);
+      nodeMap.set(nodeId, node);
+      idToNodeMap.set(nodeId, label);
+      if (subgraphStack.length > 0) {
+        subgraphStack[subgraphStack.length - 1].nodeIds.push(nodeId);
+      }
+      continue;
+    }
+
+    const circleNodeMatch = line.match(/^([a-zA-Z0-9_-]+)\(\((.*?)\)\)/);
+    if (circleNodeMatch) {
+      const nodeId = circleNodeMatch[1];
+      const label = circleNodeMatch[2];
+      const shape: 'circle' = 'circle';
+      const node: ParsedNode = { id: nodeId, label, shape };
+      nodes.push(node);
+      nodeMap.set(nodeId, node);
+      idToNodeMap.set(nodeId, label);
+      if (subgraphStack.length > 0) {
+        subgraphStack[subgraphStack.length - 1].nodeIds.push(nodeId);
+      }
+      continue;
+    }
+
+    const stadiumNodeMatch = line.match(/^([a-zA-Z0-9_-]+)\(\[(.*?)\]\)/);
+    if (stadiumNodeMatch) {
+      const nodeId = stadiumNodeMatch[1];
+      const label = stadiumNodeMatch[2];
+      const shape: 'stadium' = 'stadium';
       const node: ParsedNode = { id: nodeId, label, shape };
       nodes.push(node);
       nodeMap.set(nodeId, node);
@@ -101,36 +131,6 @@ export function parseMermaidSource(source: string): ParsedGraph {
       const nodeId = diamondNodeMatch[1];
       const label = diamondNodeMatch[2];
       const shape: 'diamond' = 'diamond';
-      const node: ParsedNode = { id: nodeId, label, shape };
-      nodes.push(node);
-      nodeMap.set(nodeId, node);
-      idToNodeMap.set(nodeId, label);
-      if (subgraphStack.length > 0) {
-        subgraphStack[subgraphStack.length - 1].nodeIds.push(nodeId);
-      }
-      continue;
-    }
-
-    const stadiumNodeMatch = line.match(/^([a-zA-Z0-9_-]+)\(\[(.*?)\]\)/);
-    if (stadiumNodeMatch) {
-      const nodeId = stadiumNodeMatch[1];
-      const label = stadiumNodeMatch[2];
-      const shape: 'stadium' = 'stadium';
-      const node: ParsedNode = { id: nodeId, label, shape };
-      nodes.push(node);
-      nodeMap.set(nodeId, node);
-      idToNodeMap.set(nodeId, label);
-      if (subgraphStack.length > 0) {
-        subgraphStack[subgraphStack.length - 1].nodeIds.push(nodeId);
-      }
-      continue;
-    }
-
-    const circleNodeMatch = line.match(/^([a-zA-Z0-9_-]+)\(\((.*?)\)\)/);
-    if (circleNodeMatch) {
-      const nodeId = circleNodeMatch[1];
-      const label = circleNodeMatch[2];
-      const shape: 'circle' = 'circle';
       const node: ParsedNode = { id: nodeId, label, shape };
       nodes.push(node);
       nodeMap.set(nodeId, node);

@@ -418,12 +418,19 @@ export interface SimpleIconConfig {
   hexColor?: string;
 }
 
+import { AWS_INLINE_SVG } from './aws-inline.js';
+
 export function getIconURL(service: string, hexColor?: string): string {
   const normalizedService = service.toLowerCase().trim();
   const slug = serviceToSlugMap[normalizedService];
 
   if (!slug) {
     return '';
+  }
+
+  const inline = AWS_INLINE_SVG[slug];
+  if (inline) {
+    return 'data:image/svg+xml;base64,' + Buffer.from(inline).toString('base64');
   }
 
   const color = hexColor || brandColors[normalizedService] || '666666';

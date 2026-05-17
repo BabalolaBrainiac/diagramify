@@ -100,12 +100,60 @@ const darkTheme: DiagramTheme = {
   },
 };
 
-/**
- * Get theme by name
- */
+const tokyoNightTheme: DiagramTheme = {
+  ...darkTheme,
+  colors: {
+    background: '#1a1b26',
+    text: '#c0caf5',
+    border: '#414868',
+    shadow: '#000000',
+    nodeBackground: '#24283b',
+    nodeBorder: '#414868',
+    edgeStroke: '#7aa2f7',
+    edgeLabel: '#c0caf5',
+  },
+};
+
+const nordTheme: DiagramTheme = {
+  ...darkTheme,
+  colors: {
+    background: '#2e3440',
+    text: '#eceff4',
+    border: '#4c566a',
+    shadow: '#000000',
+    nodeBackground: '#3b4252',
+    nodeBorder: '#4c566a',
+    edgeStroke: '#88c0d0',
+    edgeLabel: '#eceff4',
+  },
+};
+
+const catppuccinTheme: DiagramTheme = {
+  ...darkTheme,
+  colors: {
+    background: '#1e1e2e',
+    text: '#cdd6f4',
+    border: '#45475a',
+    shadow: '#000000',
+    nodeBackground: '#181825',
+    nodeBorder: '#45475a',
+    edgeStroke: '#cba6f7',
+    edgeLabel: '#cdd6f4',
+  },
+};
+
+const namedThemes: Record<string, DiagramTheme> = {
+  light: lightTheme,
+  dark: darkTheme,
+  'tokyo-night': tokyoNightTheme,
+  nord: nordTheme,
+  catppuccin: catppuccinTheme,
+};
+
 export function getTheme(themeName?: string, mode: ThemeMode = 'light'): DiagramTheme {
-  // For now, return light or dark theme
-  // In future, can support named themes like 'tokyo-night', 'gruvbox', etc.
+  if (themeName && namedThemes[themeName]) {
+    return namedThemes[themeName];
+  }
   return mode === 'dark' ? darkTheme : lightTheme;
 }
 

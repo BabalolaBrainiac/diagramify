@@ -1,9 +1,32 @@
 import sharp from 'sharp';
 import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 import { generateInteractiveHTML } from './html.js';
-import { styleSVG, addVisualEffects } from './styling/renderer.js';
+import { styleSVG } from './styling/renderer.js';
 import { getTheme } from './styling/themes.js';
 import type { DiagramifyResult, OutputFormat, RenderOptions, DiagramType } from './types.js';
+
+const themePalette: Record<string, { bg: string; fg: string; line: string; accent: string }> = {
+  light:         { bg: '#ffffff', fg: '#0f172a', line: '#94a3b8', accent: '#3b82f6' },
+  dark:          { bg: '#0a0a0f', fg: '#e2e8f0', line: '#475569', accent: '#60a5fa' },
+  'tokyo-night': { bg: '#1a1b26', fg: '#c0caf5', line: '#565f89', accent: '#7aa2f7' },
+  nord:          { bg: '#2e3440', fg: '#eceff4', line: '#4c566a', accent: '#88c0d0' },
+  catppuccin:    { bg: '#1e1e2e', fg: '#cdd6f4', line: '#45475a', accent: '#cba6f7' },
+};
+
+function applyThemeVars(svg: string, themeName?: string, darkMode?: boolean): string {
+  const key = themeName && themePalette[themeName] ? themeName : darkMode ? 'dark' : 'light';
+  const p = themePalette[key];
+  if (/<svg[^>]*\sstyle="/.test(svg)) {
+    return svg.replace(
+      /<svg([^>]*)\sstyle="[^"]*"/,
+      `<svg$1 style="--bg:${p.bg};--fg:${p.fg};--line:${p.line};--accent:${p.accent};background:var(--bg)"`,
+    );
+  }
+  return svg.replace(
+    /<svg([^>]*?)>/,
+    `<svg$1 style="--bg:${p.bg};--fg:${p.fg};--line:${p.line};--accent:${p.accent};background:var(--bg)">`,
+  );
+}
 
 function detectDiagramType(mermaidSource: string): DiagramType {
   const source = mermaidSource.trim().toLowerCase();
@@ -35,13 +58,10 @@ function renderSVG(mermaidSource: string, theme?: string, darkMode: boolean = fa
 
   try {
     let svg = renderMermaidSVG(mermaidSource, themeConfig);
+    svg = applyThemeVars(svg, theme, darkMode);
 
-    // Apply enhanced professional styling
     const diagramTheme = getTheme(theme, darkMode ? 'dark' : 'light');
     svg = styleSVG(svg, diagramTheme);
-
-    // Add visual effects for depth
-    svg = addVisualEffects(svg);
 
     return svg;
   } catch (error) {
@@ -80,7 +100,8 @@ export async function renderDiagram(
 
   if (formats.includes('svg') || formats.includes('png') || formats.includes('jpeg') || formats.includes('html')) {
     try {
-      const baseSVG = renderMermaidSVG(mermaidSource);
+      const rawSVG = renderMermaidSVG(mermaidSource);
+      const baseSVG = applyThemeVars(rawSVG, options.theme, options.darkMode ?? false);
 
       if (formats.includes('html')) {
         try {
