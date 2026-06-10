@@ -13,6 +13,10 @@ const DEFAULT_MODELS: Record<ProviderName, string> = {
 export function resolveModel(config: DiagramifyConfig): LanguageModel {
   const modelId = config.model ?? DEFAULT_MODELS[config.provider as ProviderName];
 
+  if (config.provider === 'google' && process.env.GEMINI_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = process.env.GEMINI_API_KEY;
+  }
+
   if (config.apiKey) {
     process.env[getApiKeyEnvVar(config.provider)] = config.apiKey;
   }
@@ -33,7 +37,7 @@ function getApiKeyEnvVar(provider: ProviderName): string {
   const envMap: Record<ProviderName, string> = {
     anthropic: 'ANTHROPIC_API_KEY',
     openai: 'OPENAI_API_KEY',
-    google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    google: process.env['GEMINI_API_KEY'] ? 'GEMINI_API_KEY' : 'GOOGLE_GENERATIVE_AI_API_KEY',
   };
   return envMap[provider];
 }
@@ -50,6 +54,7 @@ export async function callLLM(
     system: systemPrompt,
     prompt: userPrompt,
     temperature: temperature ?? 0.7,
+    maxTokens: maxTokens,
   });
 
   return {

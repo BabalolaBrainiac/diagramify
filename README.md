@@ -1,364 +1,382 @@
 # diagramify
 
-AI-powered Mermaid diagram generator. Analyzes codebases or descriptions and generates architecture, flowchart, sequence, class, ER, and state diagrams. Renders to SVG, PNG/JPEG, and Mermaid source. Works as a CLI tool, npm library, and Claude Code skill.
+[![npm version](https://badge.fury.io/js/diagramify-ai.svg)](https://badge.fury.io/js/diagramify-ai)
+
+> AI-powered Mermaid diagram generator. Analyze a codebase or describe your system → get interactive architecture diagrams in seconds.
+
+Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three surfaces: **CLI**, **npm library**, and a **Claude Code skill**. LLM-agnostic via the Vercel AI SDK (Anthropic / OpenAI / Google). Pure TypeScript rendering via `beautiful-mermaid` — no headless browser, no Chromium.
+
+---
 
 ## Features
 
-- **Codebase analysis** — Automatically analyze your project structure and generate architecture diagrams
-- **Natural language input** — Describe your system and let Claude generate the diagram
-- **Multiple output formats** — SVG, PNG, JPEG, and raw Mermaid source
-- **LLM-agnostic** — Works with Claude, OpenAI, or Google Gemini
-- **CLI tool** — `diagramify generate`, `diagramify render`, `diagramify init`
-- **npm library** — Import and use programmatically in your Node.js projects
-- **Claude Code skill** — Invocable via slash command or natural language in Claude Code
-- **No browser required** — Pure TypeScript rendering, no Puppeteer or Chromium
+- **Codebase analysis** — automatically map your project's structure, frameworks, services, and inter-module dependencies
+- **Natural language input** — describe your system; the LLM produces valid Mermaid syntax
+- **Interactive HTML output** — drag nodes, pan, zoom, edit labels, highlight edges, search, export
+- **Multiple output formats** — `html`, `svg`, `png`, `jpeg`, `mmd`
+- **Diagram diffing** — `diagramify diff` compares two `.mmd` files and highlights changes
+- **CI integration** — `diagramify ci` generates GitHub Actions / GitLab CI workflows
+- **Hot-reload preview** — `diagramify preview` serves and auto-refreshes on file changes
+- **LLM-agnostic** — Claude, OpenAI, or Google Gemini
+- **React component** — embed the interactive viewer in any React app
+- **No browser required** — pure TypeScript rendering, no Puppeteer
+
+---
 
 ## Installation
 
-### As a CLI tool
+### CLI (global)
 
 ```bash
-npm install -g diagramify
+npm install -g diagramify-ai
 ```
 
-### As an npm library
+### Library (per-project)
 
 ```bash
-npm install diagramify
+npm install diagramify-ai
 ```
 
 ### Claude Code skill
 
-Copy `skills/diagramify/SKILL.md` to `~/.claude/skills/diagramify/SKILL.md`:
-
 ```bash
-mkdir -p ~/.claude/skills/diagramify
-cp skills/diagramify/SKILL.md ~/.claude/skills/diagramify/
+mkdir -p ~/.claude/skills
+cp -R node_modules/diagramify/skills/diagramify ~/.claude/skills/
 ```
+
+---
 
 ## Quick start
 
-### Generate a diagram from your codebase
+### Generate an architecture diagram from your codebase
 
 ```bash
-diagramify generate --path . --type auto --out svg,png,mmd
+cd my-project
+diagramify generate --out html,svg,mmd --provider google
 ```
 
-This will analyze your codebase and generate:
-- `diagram.svg` — Scalable vector diagram
-- `diagram.png` — Rasterized PNG (1200px wide)
-- `diagram.mmd` — Raw Mermaid source code
+Opens to an interactive HTML file with draggable nodes, zoom, themes, and export.
 
-### Generate a diagram from a description
+### Generate from a description
 
 ```bash
-diagramify generate --description "Microservices with API gateway, auth service, and database" --type flowchart --out svg
+diagramify generate \
+  --description "Microservices: API gateway → auth service → user-db (PostgreSQL). Events via Kafka." \
+  --type flowchart \
+  --out html
 ```
 
 ### Render an existing .mmd file
 
 ```bash
-diagramify render mydiagram.mmd --out png,svg
+diagramify render diagram.mmd --out html,svg,png
 ```
 
-### Use as an npm library
+### Hot-reload preview
 
-```typescript
-import { generateDiagram, analyzeCodebase } from 'diagramify';
-
-// Generate from codebase
-const result = await generateDiagram({
-  input: 'codebase',
-  path: './src',
-  diagramType: 'flowchart',
-  config: { provider: 'anthropic' },
-});
-
-console.log(result.svg);     // SVG string
-console.log(result.png);     // PNG buffer
-console.log(result.mermaid); // Mermaid source code
+```bash
+diagramify preview --file diagram.mmd --port 3050
+# Open http://localhost:3050 — auto-refreshes on file changes
 ```
+
+---
+
+## CLI Reference
+
+### `diagramify generate`
+
+Analyze a codebase or description and generate a diagram.
+
+```
+diagramify generate [options]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--path <dir>` | `.` | Codebase root to analyze |
+| `--description <text>` | — | Use text instead of codebase analysis |
+| `--type <type>` | `auto` | `flowchart` \| `sequence` \| `class` \| `er` \| `state` \| `auto` |
+| `--out <formats>` | `svg,mmd` | Comma-separated: `html,svg,png,jpeg,mmd` |
+| `--outdir <dir>` | `.` | Output directory |
+| `--name <name>` | `diagram` | Base filename |
+| `--provider <name>` | `anthropic` | `anthropic` \| `openai` \| `google` |
+| `--model <id>` | provider default | Override model ID |
+| `--theme <name>` | `light` | Diagram theme |
+| `--stdout` | — | Print Mermaid source to stdout |
+| `--json` | — | Output JSON with base64 images |
+
+**Examples:**
+
+```bash
+# Architecture diagram with interactive output
+diagramify generate --out html,svg --provider google
+
+# Sequence diagram from description
+diagramify generate --description "User logs in → auth validates → JWT returned" --type sequence
+
+# Use OpenAI GPT-4o
+diagramify generate --provider openai --model gpt-4o
+```
+
+---
+
+### `diagramify render`
+
+Render an existing `.mmd` file to output formats.
+
+```
+diagramify render <input.mmd> [options]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--out <formats>` | `svg` | `html,svg,png,jpeg,mmd` |
+| `--outdir <dir>` | input file dir | Output directory |
+| `--name <name>` | `diagram` | Output filename |
+| `--theme <name>` | `light` | `light`, `dark`, `tokyo-night`, `nord`, `catppuccin` |
+| `--width <px>` | `1200` | Output width (PNG/JPEG) |
+| `--quality <1-100>` | `90` | JPEG quality |
+| `--stdout` | — | Print SVG to stdout |
+
+```bash
+# Render to interactive HTML
+diagramify render architecture.mmd --out html --theme dark
+
+# Render to high-res PNG
+diagramify render diagram.mmd --out png --width 2400
+```
+
+---
+
+### `diagramify preview`
+
+Start a hot-reloading preview server for a `.mmd` file.
+
+```
+diagramify preview --file <path> [--port <n>]
+```
+
+```bash
+diagramify preview --file diagram.mmd --port 3050
+```
+
+Keyboard shortcuts in the browser: `T` theme · `E` edit · `L` legend · `H` hide edges · `R` reset · `/` search · `Del` delete node
+
+---
+
+### `diagramify diff`
+
+Compare two Mermaid files and render a visual diff.
+
+```
+diagramify diff <old.mmd> <new.mmd> [--out html,svg] [--outdir <dir>]
+```
+
+```bash
+diagramify diff v1/diagram.mmd v2/diagram.mmd --out html
+```
+
+Green = added, red = removed, grey = unchanged.
+
+---
+
+### `diagramify ci`
+
+Generate a CI workflow that auto-regenerates diagrams on push.
+
+```
+diagramify ci [--provider github|gitlab|precommit] [--outdir <dir>]
+```
+
+```bash
+# GitHub Actions
+diagramify ci --provider github --outdir .github/workflows
+
+# Pre-commit hook
+diagramify ci --provider precommit
+```
+
+---
+
+### `diagramify init`
+
+Scaffold a `diagramify.config.ts` in the current directory.
+
+```bash
+diagramify init
+```
+
+---
 
 ## Configuration
 
 ### Environment variables
 
 ```bash
+# LLM providers (set at least one)
 export ANTHROPIC_API_KEY=sk-ant-...
-export DIAGRAMIFY_PROVIDER=anthropic
-export DIAGRAMIFY_MODEL=claude-sonnet-4-6
-export DIAGRAMIFY_THEME=default
+export OPENAI_API_KEY=sk-...
+export GOOGLE_GENERATIVE_AI_API_KEY=...
+
+# Defaults (optional)
+export DIAGRAMIFY_PROVIDER=google
+export DIAGRAMIFY_MODEL=gemini-2.5-flash
+export DIAGRAMIFY_THEME=dark
 ```
 
-### Config file
-
-Create `diagramify.config.ts` in your project root:
+### Config file (`diagramify.config.ts`)
 
 ```typescript
 import type { DiagramifyConfig } from 'diagramify';
 
 export default {
-  provider: 'anthropic',
-  model: 'claude-sonnet-4-6',
+  provider: 'google',
+  model: 'gemini-2.5-flash',
   theme: 'tokyo-night',
-  defaultOutput: ['svg', 'png', 'mmd'],
+  defaultOutput: ['html', 'svg'],
   temperature: 0.7,
-  maxTokens: 4096,
+  maxTokens: 8192,
 } satisfies DiagramifyConfig;
 ```
 
-Or use `diagramify init` to scaffold a config file.
-
-## CLI Reference
-
-### diagramify generate
-
-Analyze a codebase or description and generate a diagram.
-
-```bash
-diagramify generate [options]
-```
-
-**Options:**
-
-- `--path <dir>` — Codebase root directory (default: current directory)
-- `--description <text>` — Natural language description instead of codebase analysis
-- `--type <type>` — Diagram type: `flowchart|sequence|class|er|state|auto` (default: `auto`)
-- `--out <formats>` — Output formats: `svg,png,jpeg,mmd` (default: `svg,mmd`)
-- `--outdir <dir>` — Output directory (default: current directory)
-- `--name <name>` — Base filename for outputs (default: `diagram`)
-- `--theme <theme>` — Diagram theme name
-- `--provider <name>` — LLM provider: `anthropic|openai|google` (default: `anthropic`)
-- `--model <id>` — Model ID override
-- `--stdout` — Print Mermaid source to stdout instead of files
-- `--json` — Output as JSON with base64-encoded images
-
-**Examples:**
-
-```bash
-# Analyze current directory as flowchart
-diagramify generate --type flowchart --out svg,png
-
-# Generate sequence diagram from description
-diagramify generate --description "User logs in, auth service validates, returns token" --type sequence
-
-# Use OpenAI instead of Claude
-diagramify generate --provider openai --model gpt-4o
-```
-
-### diagramify render
-
-Render an existing .mmd file to SVG, PNG, or JPEG.
-
-```bash
-diagramify render <input.mmd> [options]
-```
-
-**Options:**
-
-- `--out <formats>` — Output formats: `svg,png,jpeg` (default: `svg`)
-- `--outdir <dir>` — Output directory (default: same as input file)
-- `--name <name>` — Output filename (default: `diagram`)
-- `--theme <theme>` — Diagram theme
-- `--width <px>` — Output width in pixels (default: `1200`)
-- `--quality <1-100>` — JPEG quality (default: `90`)
-- `--stdout` — Print SVG to stdout
-
-**Examples:**
-
-```bash
-# Render to PNG at higher quality
-diagramify render mydiagram.mmd --out png --width 1600
-
-# Render from stdin and output to stdout
-cat diagram.mmd | diagramify render - --out svg --stdout > output.svg
-```
-
-### diagramify init
-
-Create a `diagramify.config.ts` in the current directory.
-
-```bash
-diagramify init
-```
-
-## Diagram types
-
-| Type | Use case | Example |
-|------|----------|---------|
-| `flowchart` | System architecture, component connections | Microservices diagram |
-| `sequence` | Request flows, API interactions | User login sequence |
-| `class` | Data models, class hierarchies | ORM schema |
-| `er` | Database schemas, entity relationships | Database diagram |
-| `state` | State machines, workflows | Payment state machine |
-| `auto` | Auto-detect best type | Let Claude choose |
-
-## LLM Providers
-
-### Anthropic (Claude)
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-diagramify generate --provider anthropic --model claude-sonnet-4-6
-```
-
-Supported models:
-- `claude-opus-4-1`
-- `claude-sonnet-4-6`
-- `claude-haiku-3-5`
-
-### OpenAI
-
-```bash
-export OPENAI_API_KEY=sk-...
-diagramify generate --provider openai --model gpt-4o
-```
-
-Supported models:
-- `gpt-4-turbo`
-- `gpt-4o`
-- `gpt-3.5-turbo`
-
-### Google Gemini
-
-```bash
-export GOOGLE_GENERATIVE_AI_API_KEY=...
-diagramify generate --provider google --model gemini-2.5-flash
-```
-
-Supported models:
-- `gemini-2.5-flash`
-- `gemini-2.5-pro`
-- `gemini-1.5-pro`
-
-## Themes
-
-Beautiful-mermaid themes available via `--theme`:
-- `default`
-- `dark`
-- `light`
-- `tokyo-night`
-- `catppuccin-latte`
-- `nord`
-- `gruvbox`
-- And 8+ more
+---
 
 ## API Reference
 
-### generateDiagram()
+### `generateDiagram(options)`
 
 ```typescript
-async function generateDiagram(options: GenerateOptions): Promise<DiagramifyResult>
+import { generateDiagram } from 'diagramify';
+
+const result = await generateDiagram({
+  input: 'codebase',          // or 'description'
+  path: './src',              // codebase root
+  // description: '...',      // alternative to path
+  diagramType: 'flowchart',  // or 'auto'
+  config: { provider: 'anthropic' },
+});
+
+result.mermaid  // string — Mermaid source
+result.svg      // string | undefined
+result.html     // string | undefined — full interactive HTML
+result.png      // Buffer | undefined
+result.jpeg     // Buffer | undefined
+result.tokensUsed  // number | undefined
 ```
 
-Generate a diagram from a codebase or description.
-
-**Options:**
-
-- `input: 'codebase' | 'description'` — Input type
-- `path?: string` — Codebase root (for `input: 'codebase'`)
-- `description?: string` — Text description (for `input: 'description'`)
-- `diagramType?: DiagramType` — Diagram type (default: `auto`)
-- `extraContext?: string` — Additional instructions
-- `config?: DiagramifyConfig` — LLM and render config
-
-**Returns:**
-
-- `mermaid: string` — Raw Mermaid source
-- `svg?: string` — SVG markup
-- `png?: Buffer` — PNG image data
-- `jpeg?: Buffer` — JPEG image data
-- `diagramType: DiagramType` — Detected diagram type
-- `tokensUsed?: number` — Tokens used by LLM
-
-### renderDiagram()
+### `renderDiagram(source, formats, options?)`
 
 ```typescript
-async function renderDiagram(
-  mermaidSource: string,
-  formats: OutputFormat[],
-  options?: RenderOptions
-): Promise<Omit<DiagramifyResult, 'tokensUsed'>>
+import { renderDiagram } from 'diagramify';
+
+const result = await renderDiagram(mermaidSource, ['svg', 'html', 'png'], {
+  theme: 'dark',
+  width: 1600,
+});
 ```
 
-Render Mermaid source to SVG/PNG/JPEG.
-
-### analyzeCodebase()
+### `analyzeCodebase(rootPath, maxFiles?)`
 
 ```typescript
-async function analyzeCodebase(rootPath: string, maxFiles?: number): Promise<AnalysisResult>
+import { analyzeCodebase } from 'diagramify';
+
+const analysis = await analyzeCodebase('./');
+analysis.summary       // text summary for LLM prompt
+analysis.frameworks    // ['nextjs', 'postgresql', 'redis', ...]
+analysis.entryPoints   // main entry files detected
 ```
 
-Analyze a codebase without LLM calls. Returns file structure, entry points, and language detection.
+---
 
-## Development
+## React component
 
-### Build
+```tsx
+import { DiagramifyViewer } from 'diagramify/react';
 
-```bash
-npm run build
+export default function MyPage() {
+  return (
+    <DiagramifyViewer
+      mermaidSource={mermaidString}
+      theme="dark"
+      height={600}
+    />
+  );
+}
 ```
 
-### Test
+---
 
-```bash
-npm test
-```
+## Diagram types
 
-### Lint
+| Type | Best for |
+|------|----------|
+| `flowchart` | Architecture, system components, data flow |
+| `sequence` | API calls, request/response flows |
+| `class` | Data models, ORM schemas, class hierarchies |
+| `er` | Database entity-relationship diagrams |
+| `state` | State machines, workflow steps |
+| `auto` | Let the LLM decide based on context |
 
-```bash
-npm run lint
-```
+---
 
-### Type check
+## LLM Providers
 
-```bash
-npm run typecheck
-```
+| Provider | Env var | Default model |
+|----------|---------|---------------|
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
+| `openai` | `OPENAI_API_KEY` | `gpt-4o` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` |
+
+---
 
 ## Architecture
 
 ```
 diagramify/
-├── src/core/          # Core library
-│   ├── types.ts       # Shared types
-│   ├── config.ts      # Config loading
-│   ├── provider.ts    # LLM abstraction (Vercel AI SDK)
-│   ├── analyze.ts     # Codebase analysis
-│   ├── generate.ts    # Orchestration
-│   └── render.ts      # SVG/PNG/JPEG rendering
-├── src/cli/           # CLI commands
-├── skills/            # Claude Code skill
-└── examples/          # Example .mmd files
+├── src/
+│   ├── core/
+│   │   ├── types.ts       # Shared types and interfaces
+│   │   ├── config.ts      # Config file loading
+│   │   ├── provider.ts    # Vercel AI SDK abstraction
+│   │   ├── analyze.ts     # Codebase structure analysis
+│   │   ├── generate.ts    # LLM orchestration + validation
+│   │   ├── render.ts      # SVG / PNG / JPEG rendering
+│   │   ├── html.ts        # Interactive HTML overlay generator
+│   │   ├── diff.ts        # Diagram diffing
+│   │   └── ci/            # CI workflow generators
+│   ├── cli/               # CLI command handlers
+│   ├── icons/             # Service icon resolution
+│   └── react/             # React component
+├── skills/
+│   └── diagramify/
+│       └── SKILL.md       # Claude Code skill
+└── examples/              # Sample .mmd files
 ```
+
+---
 
 ## How it works
 
-1. **Analyze** — Scan the codebase structure (or accept description)
-2. **Prompt** — Build an LLM prompt with system rules and context
-3. **Generate** — Call Claude, OpenAI, or Gemini to produce Mermaid syntax
-4. **Validate** — Check the output is valid Mermaid; retry on failure
-5. **Render** — Convert Mermaid to SVG using beautiful-mermaid
-6. **Rasterize** — Optionally convert SVG to PNG/JPEG using sharp
+1. **Analyze** — scan codebase structure (files, imports, frameworks, entry points) — or accept a text description
+2. **Prompt** — build a structured LLM prompt with context and diagram rules
+3. **Generate** — call Claude / OpenAI / Gemini to produce valid Mermaid syntax
+4. **Validate** — parse and verify output; retry up to 3× on failure
+5. **Render** — convert to SVG using `beautiful-mermaid` (pure TypeScript, no DOM)
+6. **Overlay** — optionally wrap SVG in interactive HTML with icons, drag-and-drop, themes
+7. **Rasterize** — optionally convert SVG to PNG / JPEG via `sharp`
 
-## Why pure TypeScript rendering?
-
-- **No browser** — beautiful-mermaid renders synchronously without DOM
-- **No Chromium** — No 300MB+ installation
-- **Fast** — SVG generation in milliseconds
-- **Portable** — Works anywhere Node.js runs
+---
 
 ## License
 
-MIT — See LICENSE file
+MIT — see [LICENSE](./LICENSE)
 
 ## Contributing
 
-Contributions welcome! Please open issues or PRs on GitHub.
+Issues and PRs welcome at [github.com/BabalolaBrainiac/diagramify](https://github.com/BabalolaBrainiac/diagramify).
 
 ## Acknowledgments
 
-- [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) — Pure TypeScript Mermaid rendering
-- [Vercel AI SDK](https://sdk.vercel.ai) — Multi-provider LLM abstraction
-- [Mermaid](https://mermaid.js.org) — Diagram syntax and semantics
+- [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) — pure TypeScript Mermaid rendering
+- [Vercel AI SDK](https://sdk.vercel.ai) — multi-provider LLM abstraction
+- [Mermaid](https://mermaid.js.org) — diagram syntax and tooling

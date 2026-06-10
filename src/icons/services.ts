@@ -3,7 +3,7 @@
  * Maps service names to visual properties for professional diagram rendering
  */
 
-export type ServiceType = 'compute' | 'database' | 'storage' | 'network' | 'messaging' | 'cache' | 'monitoring' | 'devops' | 'analytics' | 'security' | 'ui' | 'middleware' | 'auth' | 'ml' | 'other';
+export type ServiceType = 'compute' | 'database' | 'storage' | 'network' | 'messaging' | 'cache' | 'monitoring' | 'devops' | 'analytics' | 'security' | 'ui' | 'middleware' | 'auth' | 'ml' | 'ai' | 'other';
 
 export interface ServiceDefinition {
   name: string;
@@ -18,6 +18,38 @@ export interface ServiceDefinition {
 }
 
 const serviceRegistry: Record<string, ServiceDefinition> = {
+  // AI Services
+  openai: {
+    name: 'OpenAI',
+    icon: 'openai',
+    color: '#412991',
+    backgroundColor: '#f0ecff',
+    textColor: '#412991',
+    type: 'ai',
+    aliases: ['gpt', 'chatgpt', 'gpt-4'],
+    simpleIconSlug: 'openai',
+  },
+  anthropic: {
+    name: 'Anthropic',
+    icon: 'anthropic',
+    color: '#c96442',
+    backgroundColor: '#fff5f2',
+    textColor: '#c96442',
+    type: 'ai',
+    aliases: ['claude'],
+    simpleIconSlug: 'anthropic',
+  },
+  gemini: {
+    name: 'Google Gemini',
+    icon: 'gemini',
+    color: '#4285f4',
+    backgroundColor: '#f0f4ff',
+    textColor: '#4285f4',
+    type: 'ai',
+    aliases: ['google-gemini', 'gemini-pro'],
+    simpleIconSlug: 'googlegemini',
+  },
+  
   // AWS Compute
   ec2: {
     name: 'EC2',

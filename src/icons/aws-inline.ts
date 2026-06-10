@@ -62,4 +62,5 @@ export const AWS_INLINE_SVG: Record<string, string> = {
   awscodedeploy: SVG(AWS_BLUE, FLOW),
   awscodepipeline: SVG(AWS_BLUE, FLOW),
   awscodecommit: SVG(AWS_BLUE, CUBE),
+  amazonapigateway: SVG(AWS_RED, FLOW),
 };

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Diagramify"
+  short_description: "Create and validate architecture diagrams"
+  default_prompt: "Use $diagramify to create and validate an architecture diagram for this repository."

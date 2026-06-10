@@ -1,4 +1,135 @@
 const serviceToSlugMap: Record<string, string> = {
+  // AI/ML Services
+  openai: 'openai',
+  chatgpt: 'openai',
+  'gpt-4': 'openai',
+  gpt: 'openai',
+  anthropic: 'anthropic',
+  claude: 'anthropic',
+  gemini: 'googlegemini',
+  'google-gemini': 'googlegemini',
+  mistral: 'mistral',
+  'mistral-ai': 'mistral',
+  ollama: 'ollama',
+  huggingface: 'huggingface',
+  'hugging-face': 'huggingface',
+  cohere: 'cohere',
+  replicate: 'replicate',
+  groq: 'groq',
+  perplexity: 'perplexity',
+  langchain: 'langchain',
+  llamaindex: 'llamaindex',
+  'llama-index': 'llamaindex',
+  pinecone: 'pinecone',
+  weaviate: 'weaviate',
+  chroma: 'chroma',
+  chromadb: 'chroma',
+  qdrant: 'qdrant',
+  milvus: 'milvus',
+  
+  // Data / Analytics
+  snowflake: 'snowflake',
+  databricks: 'databricks',
+  dbt: 'dbt',
+  'dbt-labs': 'dbt',
+  airflow: 'apacheairflow',
+  'apache-airflow': 'apacheairflow',
+  spark: 'apachespark',
+  'apache-spark': 'apachespark',
+  flink: 'apacheflink',
+  'apache-flink': 'apacheflink',
+  nifi: 'apachenifi',
+  'apache-nifi': 'apachenifi',
+  looker: 'looker',
+  metabase: 'metabase',
+  tableau: 'tableau',
+  grafana: 'grafana',
+  superset: 'apachesuperset',
+  'apache-superset': 'apachesuperset',
+  clickhouse: 'clickhouse',
+  trino: 'trino',
+  
+  // DevOps / IaC
+  argocd: 'argo',
+  'argo-cd': 'argo',
+  flux: 'flux',
+  fluxcd: 'flux',
+  pulumi: 'pulumi',
+  ansible: 'ansible',
+  puppet: 'puppet',
+  chef: 'chef',
+  packer: 'packer',
+  vault: 'vault',
+  'hashicorp-vault': 'vault',
+  consul: 'consul',
+  nomad: 'nomad',
+  crossplane: 'crossplane',
+  tekton: 'tekton',
+  skaffold: 'skaffold',
+  kustomize: 'kubernetes',
+  
+  // Auth / Identity
+  auth0: 'auth0',
+  okta: 'okta',
+  keycloak: 'keycloak',
+  clerk: 'clerk',
+  
+  // Monitoring / Observability
+  newrelic: 'newrelic',
+  'new-relic': 'newrelic',
+  dynatrace: 'dynatrace',
+  honeycomb: 'honeycomb',
+  signoz: 'signoz',
+  jaeger: 'jaeger',
+  zipkin: 'apachezipkin',
+  loki: 'grafana',
+  tempo: 'grafana',
+  pyroscope: 'grafana',
+  'victoria-metrics': 'victoriametrics',
+  
+  // Messaging / Streaming
+  pulsar: 'apachepulsar',
+  'apache-pulsar': 'apachepulsar',
+  
+  // Storage / CDN
+  minio: 'minio',
+  ceph: 'ceph',
+  fastly: 'fastly',
+  akamai: 'akamai',
+  bunnycdn: 'bunny',
+  bunny: 'bunny',
+  'cloudflare-r2': 'cloudflare',
+  r2: 'cloudflare',
+  backblaze: 'backblaze',
+  
+  // Frontend Frameworks
+  svelte: 'svelte',
+  sveltekit: 'svelte',
+  solid: 'solid',
+  solidjs: 'solid',
+  qwik: 'qwik',
+  astro: 'astro',
+  remix: 'remix',
+  htmx: 'htmx',
+  
+  // Backend Frameworks
+  fastify: 'fastify',
+  hapi: 'hapi',
+  nestjs: 'nestjs',
+  elysia: 'elysia',
+  bun: 'bun',
+  deno: 'deno',
+  django: 'django',
+  flask: 'flask',
+  fastapi: 'fastapi',
+  spring: 'spring',
+  'spring-boot': 'spring',
+  rails: 'rubyonrails',
+  'ruby-on-rails': 'rubyonrails',
+  fiber: 'go',
+  'go-fiber': 'go',
+  gin: 'go',
+
   postgresql: 'postgresql',
   postgres: 'postgresql',
   mysql: 'mysql',
@@ -64,6 +195,10 @@ const serviceToSlugMap: Record<string, string> = {
   ssm: 'awssystemsmanager',
   kinesis: 'amazonkinesis',
   qldb: 'amazonqldb',
+  api_gateway: 'amazonapigateway',
+  apigateway: 'amazonapigateway',
+  aws_api_gateway: 'amazonapigateway',
+  amazon_api_gateway: 'amazonapigateway',
   opensearch_service: 'opensearch',
   appsync: 'awsappsync',
   amplify: 'awsamplify',
@@ -199,13 +334,10 @@ const serviceToSlugMap: Record<string, string> = {
   react: 'react',
   vue: 'vuedotjs',
   angular: 'angular',
-  svelte: 'svelte',
   next: 'nextdotjs',
   nextjs: 'nextdotjs',
   nuxt: 'nuxtdotjs',
   gatsby: 'gatsby',
-  remix: 'remix',
-  astro: 'astro',
   tailwind: 'tailwindcss',
   bootstrap: 'bootstrap',
   material_ui: 'materialui',
@@ -225,27 +357,20 @@ const serviceToSlugMap: Record<string, string> = {
   npm: 'npm',
   yarn: 'yarn',
   pnpm: 'pnpm',
-  bun: 'bun',
   prometheus: 'prometheus',
-  grafana: 'grafana',
   datadog: 'datadog',
-  newrelic: 'newrelic',
   elastic: 'elastic',
   logstash: 'logstash',
   kibana: 'kibana',
   splunk: 'splunk',
   sumologic: 'sumo',
-  dynatrace: 'dynatrace',
   appdynamics: 'appdynamics',
   pingdom: 'pingdom',
   uptimerobot: 'uptimerobot',
   sentry: 'sentry',
   rollbar: 'rollbar',
   bugsnag: 'bugsnag',
-  honeycomb: 'honeycomb',
   lightstep: 'lightstep',
-  jaeger: 'jaegertracing',
-  zipkin: 'zipkin',
   nginx: 'nginx',
   apache: 'apache',
   httpd: 'apache',
@@ -256,15 +381,8 @@ const serviceToSlugMap: Record<string, string> = {
   f5: 'f5networks',
   varnish: 'varnish',
   squid: 'squid',
-  vault: 'vault',
-  consul: 'consul',
-  nomad: 'nomad',
   boundary: 'hashicorpboundary',
-  packer: 'packer',
   terraform: 'terraform',
-  ansible: 'ansible',
-  puppet: 'puppet',
-  chef: 'chef',
   saltstack: 'saltproject',
   jenkins: 'jenkins',
   gitlab_ci: 'gitlab',
@@ -286,39 +404,22 @@ const serviceToSlugMap: Record<string, string> = {
   fossil: 'fossil',
   pijul: 'pijul',
   git: 'git',
-  openai: 'openai',
-  anthropic: 'anthropic',
-  claude: 'anthropic',
-  gpt: 'openai',
-  chatgpt: 'openai',
-  gemini: 'googlegemini',
   google_ai: 'googlegemini',
-  cohere: 'cohere',
   hugging_face: 'huggingface',
-  huggingface: 'huggingface',
-  replicate: 'replicate',
   modal: 'modal',
   together_ai: 'togetherai',
-  mistral: 'mistralai',
-  groq: 'groq',
-  perplexity: 'perplexity',
   stabilityai: 'stabilitydotai',
   stability: 'stabilitydotai',
   deepinfra: 'deepinfra',
   baseten: 'baseten',
   modal_labs: 'modal',
-  langchain: 'langchain',
-  llamaindex: 'llamaindex',
   opentelemetry: 'opentelemetry',
   otel: 'opentelemetry',
   openmetrics: 'prometheus',
   apacheopentelemetry: 'opentelemetry',
-  databricks: 'databricks',
   wandb: 'weightsandbiases',
   mlflow: 'mlflow',
   kubeflow: 'kubeflow',
-  airflow: 'apacheairflow',
-  dbt: 'dbt',
   fivetran: 'fivetran',
   talend: 'talend',
   informatica: 'informatica',
@@ -354,8 +455,6 @@ const serviceToSlugMap: Record<string, string> = {
   tailscale: 'tailscale',
   cloudflare: 'cloudflare',
   aws_waf: 'awswaf',
-  akamai: 'akamai',
-  fastly: 'fastly',
   imperva: 'imperva',
   zscaler: 'zscaler',
   crowdstrike: 'crowdstrike',
@@ -419,32 +518,80 @@ export interface SimpleIconConfig {
 }
 
 import { AWS_INLINE_SVG } from './aws-inline.js';
+import { INLINE_SVG } from './inline-icons.js';
 
 export function getIconURL(service: string, hexColor?: string): string {
   const normalizedService = service.toLowerCase().trim();
-  const slug = serviceToSlugMap[normalizedService];
-
-  if (!slug) {
-    return '';
+  let mappedSlug = serviceToSlugMap[normalizedService];
+  
+  if (!mappedSlug) {
+    const stripped = normalizedService
+      .replace(/\([^)]*\)/g, '')
+      .replace(/\b(?:aws|amazon|google cloud|gcp|microsoft azure|azure)\b/g, '')
+      .replace(/[^a-z0-9]/g, '');
+    
+    if (stripped) {
+      for (const [key, val] of Object.entries(serviceToSlugMap)) {
+        if (key.replace(/[^a-z0-9]/g, '') === stripped) {
+          mappedSlug = val;
+          break;
+        }
+      }
+    }
   }
 
+  // Keyword heuristic — only used for CDN lookup, NOT treated as a definitive mapping.
+  // We keep it separate from mappedSlug so truly unknown services still fall through
+  // to the data-URI fallback rather than an unverifiable CDN URL.
+  let heuristicSlug: string | undefined;
+  if (!mappedSlug) {
+    if (/auth|login|security|identity/i.test(service)) heuristicSlug = 'keycloak';
+    else if (/admin|config|setting|system/i.test(service)) heuristicSlug = 'kubernetes';
+    else if (/api|gateway/i.test(service)) heuristicSlug = 'openapiinitiative';
+    else if (/job|worker|task|cron|process/i.test(service)) heuristicSlug = 'apacheairflow';
+    else if (/\bweb\b|frontend|\bclient\b/i.test(service)) heuristicSlug = 'html5';
+  }
+
+  const color = hexColor || brandColors[normalizedService] || '666666';
+  const slug = mappedSlug ?? heuristicSlug ?? normalizedService.replace(/[^a-z0-9]/g, '');
+
+  // Check AWS inline SVGs
   const inline = AWS_INLINE_SVG[slug];
   if (inline) {
     return 'data:image/svg+xml;base64,' + Buffer.from(inline).toString('base64');
   }
 
-  const color = hexColor || brandColors[normalizedService] || '666666';
-  return `https://cdn.simpleicons.org/${slug}/${color.replace('#', '')}`;
+  // Check general inline SVGs
+  const generalInline = INLINE_SVG[slug];
+  if (generalInline) {
+    const colored = generalInline.replace(/currentColor/g, `#${color.replace('#', '')}`);
+    return 'data:image/svg+xml;base64,' + Buffer.from(colored).toString('base64');
+  }
+
+  // If we found a mapped slug, try CDN
+  if (mappedSlug) {
+    return `https://cdn.simpleicons.org/${slug}/${color.replace('#', '')}`;
+  }
+
+  // No mapping found, return fallback SVG as data URI
+  const fallbackSvg = getFallbackSVG(service, color);
+  return 'data:image/svg+xml;base64,' + Buffer.from(fallbackSvg).toString('base64');
 }
 
 export function getFallbackSVG(label: string, color: string = '#999999'): string {
-  const chars = label.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || '?';
-  const bgColor = color;
-  const textColor = shouldUseLightText(color) ? '#ffffff' : '#000000';
+  const words = label.split(/(?=[A-Z])|[\s_-]/).filter(Boolean);
+  let chars = '?';
+  if (words.length >= 2) {
+    chars = (words[0][0] + words[1][0]).toUpperCase();
+  } else if (words.length === 1) {
+    chars = words[0].slice(0, 2).toUpperCase();
+  }
+  const displayColor = color === '#f5f5f5' ? '#64748b' : color;
 
   return `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-    <rect width="36" height="36" rx="6" fill="${bgColor}"/>
-    <text x="18" y="20" font-size="16" font-weight="600" text-anchor="middle" fill="${textColor}" font-family="system-ui, -apple-system, sans-serif">
+    <circle cx="18" cy="18" r="16" fill="${displayColor}" opacity="0.15"/>
+    <circle cx="18" cy="18" r="16" fill="none" stroke="${displayColor}" stroke-width="1.5" opacity="0.4"/>
+    <text x="18" y="23" font-size="14" font-weight="600" text-anchor="middle" fill="${displayColor}" font-family="system-ui, -apple-system, sans-serif">
       ${chars}
     </text>
   </svg>`;

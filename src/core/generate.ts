@@ -8,9 +8,10 @@ const SYSTEM_PROMPT = `You are a senior systems architect producing detailed, pr
 
 OUTPUT FORMAT
 - Mermaid source only. No markdown fences. No commentary.
-- Start with "flowchart LR" for typical service architectures (or "flowchart TD" only when the graph is naturally vertical, e.g. layered pipelines).
 - IDs: alphanumeric + underscore only.
-- Labels in square brackets: A[PostgreSQL]. Use the canonical service name VERBATIM — "PostgreSQL" not "Database", "Redis" not "Cache", "Kafka" not "Message Broker". Diagramify's icon registry matches by exact label, so generic words lose the brand icon.
+- For flowcharts, use the canonical service name VERBATIM — "PostgreSQL" not "Database", "Redis" not "Cache".
+- DO NOT use special node shapes (cylinders, circles, hexagons) in flowcharts. Only use the default rectangle shape [ and ].
+- If requested or if the architecture implies a temporal flow, use sequenceDiagram or other appropriate Mermaid types.
 
 DEPTH — favor completeness over brevity. 20-60 nodes is the right range for any non-trivial system.
 - Every database, cache, queue, and message broker actually used.
@@ -19,6 +20,7 @@ DEPTH — favor completeness over brevity. 20-60 nodes is the right range for an
 - Every edge layer (CloudFront, Cloudflare, Vercel Edge, Fastly).
 - Every CI/CD and runtime concern (Docker, Kubernetes, GitHub Actions, GitLab CI, Terraform).
 - Frontend frameworks as their own nodes (React, Next.js, Vue, Svelte).
+- Monorepos and Microservices: Map internal module dependencies accurately. Represent each microservice or module as a specific node. Do not lump all internal code into one generic "Backend" node. Instead, explicitly define internal service nodes (e.g., "AccountConfigAuth", "CoreService", etc.) and the interactions between them.
 - For codebases: scan package.json / requirements.txt / go.mod / Cargo.toml / Gemfile / pom.xml for ALL dependencies that imply external services or infrastructure.
 
 GROUPING — always use subgraphs. Pick from this set; add domain-specific ones when warranted; omit empty groups.
@@ -39,7 +41,8 @@ EDGES — every edge tells a story.
 - Always LABEL the edge with what crosses it: REST, gRPC, SQL, events, webhook, scrapes, cache, inference, SSR, OIDC, OAuth.
 
 ANTI-PATTERNS — do not do these.
-- Generic labels: "Database", "Service", "Cache", "Queue", "API", "Backend".
+- Generic labels: "Database", "Service", "Cache", "Queue", "API", "Backend", "Frontend". Use specific, precise names.
+- Lumping multiple internal microservices into one node. They must be separate nodes to show internal architecture.
 - Lumping multiple services into one node: split "AWS" into the specific services (Lambda, S3, RDS).
 - Skipping observability or auth because they are "boring infrastructure" — include them.
 - Fewer than 15 nodes for any non-trivial codebase.
@@ -82,10 +85,11 @@ export async function generateDiagram(options: GenerateOptions): Promise<Diagram
   const model = resolveModel(config);
 
   let contextSummary = '';
+  let analysis: any = null;
 
   if (options.input === 'codebase') {
     const path = options.path || process.cwd();
-    const analysis = await analyzeCodebase(path);
+    analysis = await analyzeCodebase(path);
     contextSummary = analysis.summary;
   } else if (options.input === 'description') {
     contextSummary = options.description || '';
@@ -96,13 +100,31 @@ export async function generateDiagram(options: GenerateOptions): Promise<Diagram
       ? `Use the "${options.diagramType}" diagram type.`
       : 'Choose the most appropriate diagram type based on the content.';
 
+  const serviceHint = analysis?.detectedServices?.length > 0
+    ? `\nDetected services in codebase: ${analysis.detectedServices.join(', ')}. Use these exact names as node labels for icon matching.`
+    : '';
+
+  const endpointHint = analysis?.apiEndpoints?.length > 0
+    ? `\nDetected API endpoints: ${analysis.apiEndpoints.slice(0, 10).map((e: any) => `${e.method ?? 'ANY'} ${e.path}`).join(', ')}.`
+    : '';
+
+  const dirHint = analysis?.serviceDirectories?.length > 0
+    ? `\nService directories detected: ${analysis.serviceDirectories.join(', ')}. Create subgraphs for each.`
+    : '';
+
+  const linksHint = analysis?.internalLinks?.length > 0
+    ? `\nInternal Monorepo links detected (A depends on B): ${analysis.internalLinks.map((l: any) => `${l.from} -> ${l.to}`).join(', ')}.`
+    : '';
+
   const userPrompt = `${diagramTypeSpec}
 
 ${contextSummary}
+${serviceHint}${endpointHint}${dirHint}${linksHint}
 
 ${options.extraContext ? `Additional instructions: ${options.extraContext}` : ''}
 
-Generate a Mermaid diagram representing the above.`;
+Generate a Mermaid diagram representing the above.
+IMPORTANT: Start the diagram with "flowchart ${config.direction || 'LR'}".`;
 
   const llmResult = await callLLM(
     model,
@@ -113,6 +135,19 @@ Generate a Mermaid diagram representing the above.`;
   );
 
   let mermaidSource = stripMarkdownFences(llmResult.text);
+  
+  mermaidSource = mermaidSource
+    .replace(/\[\(([^)]+)\)\]/g, '[$1]')   // cylinders
+    .replace(/\(\(([^)]+)\)\)/g, '[$1]')   // circles
+    .replace(/\{([^{}]+)\}/g, '[$1]')        // diamonds
+    .replace(/\>([^\]]+)\]/g, '[$1]')       // flags
+    .replace(/\(\[([^\]]+)\]\)/g, '[$1]');// stadiums
+
+  // Add layout directives for wider spacing to avoid overlap in custom HTML nodes
+  let finalMermaidSource = mermaidSource;
+  if (finalMermaidSource.startsWith('flowchart') || finalMermaidSource.startsWith('graph')) {
+    finalMermaidSource = `%%{init: {"flowchart": {"nodeSpacing": 100, "rankSpacing": 150}}}%%\n${finalMermaidSource}`;
+  }
 
   if (!validateMermaidSource(mermaidSource)) {
     const corrected = await retryWithCorrection(model, mermaidSource, SYSTEM_PROMPT);
@@ -128,13 +163,14 @@ Generate a Mermaid diagram representing the above.`;
   }
 
   const formats = options.config?.defaultOutput || config.defaultOutput || ['svg', 'mmd'];
-  const renderResult = await renderDiagram(mermaidSource, formats, {
+  const renderResult = await renderDiagram(finalMermaidSource, formats, {
     theme: config.theme,
     darkMode: config.darkMode,
   });
 
   return {
     ...renderResult,
+    mermaid: finalMermaidSource, // override with directive
     tokensUsed: llmResult.tokensUsed,
   };
 }

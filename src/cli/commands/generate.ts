@@ -21,6 +21,7 @@ export const generateCommand = new Command()
   .option('--dark', 'Use dark mode theme')
   .option('--provider <name>', 'LLM provider: anthropic|openai|google')
   .option('--model <id>', 'Model ID override')
+  .option('--direction <dir>', 'Flow direction: LR, TD, TB, RL (default: LR)')
   .option('--stdout', 'Print Mermaid source to stdout instead of writing files')
   .option('--json', 'Output result as JSON with base64-encoded images')
   .action(async (options) => {
@@ -44,6 +45,7 @@ export const generateCommand = new Command()
           theme: options.theme,
           darkMode: options.dark ?? false,
           defaultOutput: formats as OutputFormat[],
+          direction: options.direction as any,
         },
       };
 
