@@ -36,7 +36,7 @@ export const previewCommand = new Command()
   .option('--open', 'Open browser automatically')
   .action(async (options) => {
     const port = parseInt(options.port, 10);
-    let filePath = options.file ? resolve(options.file) : undefined;
+    const filePath = options.file ? resolve(options.file) : undefined;
 
     if (!filePath) {
       console.log('Interactive preview mode');

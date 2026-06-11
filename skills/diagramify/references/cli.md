@@ -1,13 +1,13 @@
 # Diagramify CLI Reference
 
-Use `npx diagramify` when Diagramify is a project dependency. Substitute `diagramify` when a global binary is already available.
+Use `npx diagramify-ai` when Diagramify is a project dependency. Substitute `diagramify` when a global binary is already available.
 
 ## Generate
 
 Generate from a repository:
 
 ```bash
-npx diagramify generate \
+npx diagramify-ai generate \
   --path . \
   --type flowchart \
   --direction LR \
@@ -20,7 +20,7 @@ npx diagramify generate \
 Generate from a description:
 
 ```bash
-npx diagramify generate \
+npx diagramify-ai generate \
   --description "Browser calls API Gateway over HTTPS. Gateway validates JWT with Auth0, calls Orders API, and Orders API reads PostgreSQL and publishes order-created events to Kafka." \
   --type flowchart \
   --out mmd,html,svg \
@@ -59,7 +59,7 @@ Provider keys:
 Render and validate an existing source:
 
 ```bash
-npx diagramify render diagrams/system-architecture.mmd \
+npx diagramify-ai render diagrams/system-architecture.mmd \
   --out html,svg,png \
   --outdir diagrams \
   --name system-architecture \
@@ -70,7 +70,7 @@ npx diagramify render diagrams/system-architecture.mmd \
 Render from stdin:
 
 ```bash
-printf 'flowchart LR\nA[Client] --> B[API]\n' | npx diagramify render - --out svg --stdout
+printf 'flowchart LR\nA[Client] --> B[API]\n' | npx diagramify-ai render - --out svg --stdout
 ```
 
 `render` defaults to `svg,html`, writes to the current directory unless `--outdir` is supplied, and uses `diagram` as the default base name. `--quality` controls JPEG quality.
@@ -78,7 +78,7 @@ printf 'flowchart LR\nA[Client] --> B[API]\n' | npx diagramify render - --out sv
 ## Preview
 
 ```bash
-npx diagramify preview --file diagrams/system-architecture.mmd --port 3050 --theme dark
+npx diagramify-ai preview --file diagrams/system-architecture.mmd --port 3050 --theme dark
 ```
 
 Add `--open` only when opening the browser is appropriate. Stop the long-running preview server after review.
@@ -89,7 +89,7 @@ Diff parsing is designed for flowcharts. Keep node IDs stable between versions.
 
 ```bash
 mkdir -p diagrams/diff
-npx diagramify diff diagrams/v1.mmd diagrams/v2.mmd \
+npx diagramify-ai diff diagrams/v1.mmd diagrams/v2.mmd \
   --out html,mmd \
   --outdir diagrams/diff \
   --name architecture-change \
@@ -103,9 +103,9 @@ Create the output directory first. Current CLI support reliably writes `html` an
 The CI provider is a positional argument:
 
 ```bash
-npx diagramify ci github --outdir diagrams --branch main
-npx diagramify ci gitlab --outdir diagrams --branch main
-npx diagramify ci precommit --outdir diagrams
+npx diagramify-ai ci github --outdir diagrams --branch main
+npx diagramify-ai ci gitlab --outdir diagrams --branch main
+npx diagramify-ai ci precommit --outdir diagrams
 ```
 
 Add `--commit` only when generated diagrams should be committed automatically. Inspect generated workflows before completion and ensure the required provider secret is configured in CI.
@@ -113,7 +113,7 @@ Add `--commit` only when generated diagrams should be committed automatically. I
 ## Initialize Configuration
 
 ```bash
-npx diagramify init
+npx diagramify-ai init
 ```
 
 Configuration precedence is: explicit command/API overrides, Diagramify environment variables, `diagramify.config.ts` or `.js`, then built-in defaults. A provider-specific API key is resolved after merging.

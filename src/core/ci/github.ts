@@ -26,7 +26,7 @@ export function generateGitHubActionsWorkflow(options: GitHubActionsOptions): st
         env:
           ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: \${{ secrets.OPENAI_API_KEY }}
-        run: npx diagramify generate --path . --outdir ${outPath} --out html,svg,png
+        run: npx diagramify-ai generate --path . --outdir ${outPath} --out html,svg,png
   `;
 
   if (options.commitDiagrams) {

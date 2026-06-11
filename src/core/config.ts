@@ -10,7 +10,6 @@ const DEFAULT_MODELS: Record<ProviderName, string> = {
 
 const DEFAULTS: DiagramifyConfig = {
   provider: 'anthropic',
-  model: DEFAULT_MODELS.anthropic,
   theme: 'default',
   defaultOutput: ['svg', 'mmd'],
   temperature: 0.7,
@@ -59,6 +58,12 @@ function loadEnvConfig(): Partial<DiagramifyConfig> {
   return config;
 }
 
+function withoutUndefined<T extends object>(value: T | null | undefined): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value ?? {}).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
+}
+
 export async function loadConfig(
   override?: Partial<DiagramifyConfig>,
 ): Promise<DiagramifyConfig> {
@@ -67,9 +72,9 @@ export async function loadConfig(
 
   const merged: DiagramifyConfig = {
     ...DEFAULTS,
-    ...fileConfig,
-    ...envConfig,
-    ...override,
+    ...withoutUndefined(fileConfig),
+    ...withoutUndefined(envConfig),
+    ...withoutUndefined(override),
   };
 
   if (!merged.apiKey) {
@@ -86,7 +91,7 @@ export async function loadConfig(
   }
 
   if (!merged.model) {
-    merged.model = DEFAULT_MODELS[merged.provider as ProviderName];
+    merged.model = DEFAULT_MODELS[merged.provider];
   }
 
   return merged;

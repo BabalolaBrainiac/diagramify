@@ -1,6 +1,4 @@
-import { ParsedGraph, ParsedNode, ParsedEdge, ParsedSubgraph } from './parse.js';
-import { generateInteractiveHTML } from './html.js';
-import { renderDiagram } from './render.js';
+import type { ParsedGraph, ParsedEdge } from './parse.js';
 
 export interface NodeDiffEntry {
   id: string;
@@ -142,7 +140,7 @@ export function generateDiffHTML(
   diff: DiagramDiff,
   beforeSvg: string,
   afterSvg: string,
-  options?: { theme?: string }
+  _options?: { theme?: string }
 ): string {
   // Simple side by side
   return `<!DOCTYPE html>

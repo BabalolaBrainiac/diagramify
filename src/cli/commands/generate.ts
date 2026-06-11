@@ -40,7 +40,7 @@ export const generateCommand = new Command()
         description: options.description,
         diagramType: options.type as DiagramType,
         config: {
-          provider: (options.provider || 'anthropic') as any,
+          provider: options.provider,
           model: options.model,
           theme: options.theme,
           darkMode: options.dark ?? false,

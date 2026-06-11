@@ -3,7 +3,7 @@ export function generatePrecommitHook(outPath: string = 'diagrams'): string {
 # diagramify pre-commit hook
 
 echo "Generating architecture diagrams..."
-npx diagramify generate --path . --outdir ${outPath} --out html,svg,png
+npx diagramify-ai generate --path . --outdir ${outPath} --out html,svg,png
 
 if [ $? -ne 0 ]; then
   echo "Error: diagramify failed."

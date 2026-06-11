@@ -5,7 +5,7 @@
 Check the project-local binary first:
 
 ```bash
-npx diagramify --help
+npx diagramify-ai --help
 ```
 
 Install or modify dependencies only with user approval when the package is unavailable.
@@ -33,7 +33,7 @@ Never print API-key values while diagnosing.
 - Render the `.mmd` directly to get the concrete failure:
 
 ```bash
-npx diagramify render path/to/diagram.mmd --out svg --outdir /tmp --name validation
+npx diagramify-ai render path/to/diagram.mmd --out svg --outdir /tmp --name validation
 ```
 
 - Simplify unsupported Mermaid syntax.

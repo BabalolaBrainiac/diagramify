@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
-const CONFIG_TEMPLATE = `import type { DiagramifyConfig } from 'diagramify';
+const CONFIG_TEMPLATE = `import type { DiagramifyConfig } from 'diagramify-ai';
 
 export default {
   // LLM Provider: 'anthropic' | 'openai' | 'google'

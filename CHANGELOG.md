@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.2.1] — 2026-06-11
+
+### Added
+- GitHub Actions CI across Node.js 18, 20, and 22
+- Dependabot, issue templates, pull request template, contribution guide, security policy, and code of conduct
+- Release-readiness regression coverage and production dependency audit command
+
+### Changed
+- Marked package metadata and documentation explicitly as open source
+- Corrected npm package references and pinned `beautiful-mermaid`
+- Hardened interactive HTML generation against script injection
+
+### Fixed
+- Provider-specific default model selection
+- Class, ER, state, and directive-prefixed flowchart detection
+- Non-flowchart generation being incorrectly forced or rewritten as flowcharts
+- `diagramify diff --out svg` output and missing output-directory creation
+- CLI and package version mismatches
+
+---
+
 ## [0.2.0] — 2026-06-10
 
 ### Added
@@ -23,7 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **`diagramify preview`** command — hot-reloading browser preview server for `.mmd` files
 - **`diagramify diff`** command — compare two `.mmd` files and render a diff HTML/SVG showing added/removed nodes and edges
 - **`diagramify ci`** command — generate GitHub Actions or GitLab CI workflows that auto-regenerate diagrams on push
-- **React component** (`import { DiagramifyViewer } from 'diagramify/react'`) — embed the interactive viewer in React apps
+- **React component** (`import { DiagramViewer } from 'diagramify-ai/react'`) — embed the interactive viewer in React apps
 - **Expanded icon system** — 200+ service icons with brand-accurate colors (AWS, GCP, Azure, databases, messaging, DevOps, AI/ML, etc.)
 - **Deeper codebase analysis** — internal dependency graph detection for monorepos; identifies entry points, frameworks, and inter-service connections
 - **`html` format** added to `generateDiagram()` and `renderDiagram()` return types
@@ -53,4 +74,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Pure-TypeScript SVG rendering via `beautiful-mermaid` (no Puppeteer / headless browser)
 - PNG and JPEG rasterization via `sharp`
 - Claude Code skill in `skills/`
-- React component (`diagramify/react` subpath)
+- React component (`diagramify-ai/react` subpath)

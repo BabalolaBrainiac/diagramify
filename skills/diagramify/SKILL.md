@@ -68,7 +68,7 @@ For visual review, prefer interactive HTML. Use SVG for deterministic, inspectab
 
 ## Operational Rules
 
-- Check whether `diagramify` is available before installing anything. Prefer the project's local binary through `npx diagramify`; use a global binary only when already installed.
+- Check whether `diagramify` is available before installing anything. Prefer the project's local dependency through `npx diagramify-ai`; use a global binary only when already installed.
 - Generation requires an API key for the selected provider. Rendering, previewing, and diffing existing Mermaid do not require an LLM key.
 - Never expose API-key values in commands, output, diagrams, or committed files.
 - Keep generated artifacts in the user-requested location. Otherwise default to `diagrams/` with descriptive base names such as `system-context`, `request-flow`, or `data-model`.

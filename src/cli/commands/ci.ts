@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
 import { generateGitHubActionsWorkflow } from '../../core/ci/github.js';
 import { generateGitLabCI } from '../../core/ci/gitlab.js';
 import { generatePrecommitHook } from '../../core/ci/precommit.js';

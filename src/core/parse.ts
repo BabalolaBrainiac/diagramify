@@ -49,7 +49,7 @@ export function parseMermaidSource(source: string): ParsedGraph {
   const extractNodesAndEdges = (line: string) => {
     // First extract edges to get node references, then extract nodes
     // Pattern: nodeId[label] --> nodeId[label] or nodeId -->|label| nodeId
-    const edgePattern = /([a-zA-Z0-9_-]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?\s*(?:\-\.->|-->|<-->)\s*(?:\|([^|]+)\|)?\s*([a-zA-Z0-9_-]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?/g;
+    const edgePattern = /([a-zA-Z0-9_-]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?\s*(?:-\.->|-->|<-->)\s*(?:\|([^|]+)\|)?\s*([a-zA-Z0-9_-]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?/g;
 
     for (const match of line.matchAll(edgePattern)) {
       const from = match[1];

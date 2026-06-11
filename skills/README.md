@@ -15,7 +15,7 @@ For an installed npm package:
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -R node_modules/diagramify/skills/diagramify ~/.claude/skills/
+cp -R node_modules/diagramify-ai/skills/diagramify ~/.claude/skills/
 ```
 
 ## Invoke

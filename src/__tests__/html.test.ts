@@ -121,4 +121,12 @@ describe('Phase 1: Interactive HTML Generation', () => {
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('</html>');
   });
+
+  it('does not allow Mermaid source to break out of the generated script', () => {
+    const malicious = 'flowchart TD\nA["</script><script>alert(1)</script>"]';
+    const html = generateInteractiveHTML(testSVG, malicious);
+
+    expect(html).not.toContain('</script><script>alert(1)</script>');
+    expect(html).toContain('\\u003c/script\\u003e');
+  });
 });

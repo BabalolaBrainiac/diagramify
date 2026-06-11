@@ -10,7 +10,7 @@ import { makeCICommand } from './commands/ci.js';
 program
   .name('diagramify')
   .description('AI-powered Mermaid diagram generator')
-  .version('0.1.0');
+  .version('0.2.1');
 
 program.addCommand(generateCommand);
 program.addCommand(renderCommand);

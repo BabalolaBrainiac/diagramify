@@ -218,13 +218,17 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
                 }
                 const deps = Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) });
                 allPkgDeps.push({ dirName, deps });
-              } catch {}
+              } catch {
+                // Ignore unreadable or invalid package manifests during best-effort analysis.
+              }
             }
           }
         }
       }
     }
-  } catch {}
+  } catch {
+    // Ignore scan failures and return any service directories found so far.
+  }
   
   const links: Array<{from: string, to: string}> = [];
   for (const { dirName, deps } of allPkgDeps) {
@@ -262,13 +266,6 @@ const DEFAULT_IGNORE = [
 ];
 
 const ENTRY_POINT_PATTERNS = /^(index|main|app|server|start|entry)\.(ts|js|py|go|java|cs)$/i;
-
-const FRAMEWORK_INDICATORS: Record<string, { pattern: RegExp; name: string }> = {
-  'package.json': { pattern: /next|react|vue|angular|express|fastify/i, name: 'package.json' },
-  'requirements.txt': { pattern: /django|flask|fastapi|celery/i, name: 'requirements.txt' },
-  'go.mod': { pattern: /github\.com/i, name: 'go.mod' },
-  'Cargo.toml': { pattern: /tokio|actix|rocket/i, name: 'Cargo.toml' },
-};
 
 function scoreFile(filePath: string, root: string): number {
   const rel = relative(root, filePath);

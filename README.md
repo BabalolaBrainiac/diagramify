@@ -1,8 +1,10 @@
-# diagramify
+# Diagramify
 
 [![npm version](https://badge.fury.io/js/diagramify-ai.svg)](https://badge.fury.io/js/diagramify-ai)
+[![CI](https://github.com/BabalolaBrainiac/diagramify/actions/workflows/ci.yml/badge.svg)](https://github.com/BabalolaBrainiac/diagramify/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> AI-powered Mermaid diagram generator. Analyze a codebase or describe your system → get interactive architecture diagrams in seconds.
+> Open-source AI-powered Mermaid diagram generator. Analyze a codebase or describe your system → get interactive architecture diagrams in seconds.
 
 Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three surfaces: **CLI**, **npm library**, and a **Claude Code skill**. LLM-agnostic via the Vercel AI SDK (Anthropic / OpenAI / Google). Pure TypeScript rendering via `beautiful-mermaid` — no headless browser, no Chromium.
 
@@ -41,7 +43,7 @@ npm install diagramify-ai
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -R node_modules/diagramify/skills/diagramify ~/.claude/skills/
+cp -R node_modules/diagramify-ai/skills/diagramify ~/.claude/skills/
 ```
 
 ---
@@ -185,15 +187,15 @@ Green = added, red = removed, grey = unchanged.
 Generate a CI workflow that auto-regenerates diagrams on push.
 
 ```
-diagramify ci [--provider github|gitlab|precommit] [--outdir <dir>]
+diagramify ci <github|gitlab|precommit> [--outdir <dir>]
 ```
 
 ```bash
 # GitHub Actions
-diagramify ci --provider github --outdir .github/workflows
+diagramify ci github --outdir diagrams
 
 # Pre-commit hook
-diagramify ci --provider precommit
+diagramify ci precommit
 ```
 
 ---
@@ -227,7 +229,7 @@ export DIAGRAMIFY_THEME=dark
 ### Config file (`diagramify.config.ts`)
 
 ```typescript
-import type { DiagramifyConfig } from 'diagramify';
+import type { DiagramifyConfig } from 'diagramify-ai';
 
 export default {
   provider: 'google',
@@ -246,7 +248,7 @@ export default {
 ### `generateDiagram(options)`
 
 ```typescript
-import { generateDiagram } from 'diagramify';
+import { generateDiagram } from 'diagramify-ai';
 
 const result = await generateDiagram({
   input: 'codebase',          // or 'description'
@@ -267,7 +269,7 @@ result.tokensUsed  // number | undefined
 ### `renderDiagram(source, formats, options?)`
 
 ```typescript
-import { renderDiagram } from 'diagramify';
+import { renderDiagram } from 'diagramify-ai';
 
 const result = await renderDiagram(mermaidSource, ['svg', 'html', 'png'], {
   theme: 'dark',
@@ -278,7 +280,7 @@ const result = await renderDiagram(mermaidSource, ['svg', 'html', 'png'], {
 ### `analyzeCodebase(rootPath, maxFiles?)`
 
 ```typescript
-import { analyzeCodebase } from 'diagramify';
+import { analyzeCodebase } from 'diagramify-ai';
 
 const analysis = await analyzeCodebase('./');
 analysis.summary       // text summary for LLM prompt
@@ -291,11 +293,11 @@ analysis.entryPoints   // main entry files detected
 ## React component
 
 ```tsx
-import { DiagramifyViewer } from 'diagramify/react';
+import { DiagramViewer } from 'diagramify-ai/react';
 
 export default function MyPage() {
   return (
-    <DiagramifyViewer
+    <DiagramViewer
       mermaidSource={mermaidString}
       theme="dark"
       height={600}
@@ -367,13 +369,18 @@ diagramify/
 
 ---
 
-## License
+## Open source
 
-MIT — see [LICENSE](./LICENSE)
+Diagramify is open-source software released under the [MIT License](./LICENSE).
+You can use, modify, distribute, and contribute to it. See
+[CONTRIBUTING.md](./CONTRIBUTING.md), [SECURITY.md](./SECURITY.md), and the
+[Code of Conduct](./CODE_OF_CONDUCT.md) before participating.
 
 ## Contributing
 
-Issues and PRs welcome at [github.com/BabalolaBrainiac/diagramify](https://github.com/BabalolaBrainiac/diagramify).
+Issues and pull requests are welcome at
+[github.com/BabalolaBrainiac/diagramify](https://github.com/BabalolaBrainiac/diagramify).
+Run `npm run check` before submitting a change.
 
 ## Acknowledgments
 

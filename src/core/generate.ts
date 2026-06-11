@@ -1,4 +1,4 @@
-import type { DiagramifyResult, GenerateOptions, DiagramType } from './types.js';
+import type { DiagramifyResult, GenerateOptions } from './types.js';
 import { loadConfig } from './config.js';
 import { resolveModel, callLLM } from './provider.js';
 import { renderDiagram } from './render.js';
@@ -99,6 +99,12 @@ export async function generateDiagram(options: GenerateOptions): Promise<Diagram
     options.diagramType && options.diagramType !== 'auto'
       ? `Use the "${options.diagramType}" diagram type.`
       : 'Choose the most appropriate diagram type based on the content.';
+  const startInstruction =
+    options.diagramType === 'flowchart'
+      ? `Start the diagram with "flowchart ${config.direction || 'LR'}".`
+      : options.diagramType && options.diagramType !== 'auto'
+        ? 'Start with the canonical Mermaid declaration for the requested diagram type.'
+        : `Start with the canonical declaration for the chosen diagram type. If it is a flowchart, use direction "${config.direction || 'LR'}".`;
 
   const serviceHint = analysis?.detectedServices?.length > 0
     ? `\nDetected services in codebase: ${analysis.detectedServices.join(', ')}. Use these exact names as node labels for icon matching.`
@@ -124,7 +130,7 @@ ${serviceHint}${endpointHint}${dirHint}${linksHint}
 ${options.extraContext ? `Additional instructions: ${options.extraContext}` : ''}
 
 Generate a Mermaid diagram representing the above.
-IMPORTANT: Start the diagram with "flowchart ${config.direction || 'LR'}".`;
+IMPORTANT: ${startInstruction}`;
 
   const llmResult = await callLLM(
     model,
@@ -136,17 +142,13 @@ IMPORTANT: Start the diagram with "flowchart ${config.direction || 'LR'}".`;
 
   let mermaidSource = stripMarkdownFences(llmResult.text);
   
-  mermaidSource = mermaidSource
-    .replace(/\[\(([^)]+)\)\]/g, '[$1]')   // cylinders
-    .replace(/\(\(([^)]+)\)\)/g, '[$1]')   // circles
-    .replace(/\{([^{}]+)\}/g, '[$1]')        // diamonds
-    .replace(/\>([^\]]+)\]/g, '[$1]')       // flags
-    .replace(/\(\[([^\]]+)\]\)/g, '[$1]');// stadiums
-
-  // Add layout directives for wider spacing to avoid overlap in custom HTML nodes
-  let finalMermaidSource = mermaidSource;
-  if (finalMermaidSource.startsWith('flowchart') || finalMermaidSource.startsWith('graph')) {
-    finalMermaidSource = `%%{init: {"flowchart": {"nodeSpacing": 100, "rankSpacing": 150}}}%%\n${finalMermaidSource}`;
+  if (mermaidSource.startsWith('flowchart') || mermaidSource.startsWith('graph')) {
+    mermaidSource = mermaidSource
+      .replace(/\[\(([^)]+)\)\]/g, '[$1]')   // cylinders
+      .replace(/\(\(([^)]+)\)\)/g, '[$1]')   // circles
+      .replace(/\{([^{}]+)\}/g, '[$1]')      // diamonds
+      .replace(/>([^\]]+)\]/g, '[$1]')       // flags
+      .replace(/\(\[([^\]]+)\]\)/g, '[$1]'); // stadiums
   }
 
   if (!validateMermaidSource(mermaidSource)) {
@@ -160,6 +162,12 @@ IMPORTANT: Start the diagram with "flowchart ${config.direction || 'LR'}".`;
     throw new Error(
       `Generated Mermaid source is invalid even after correction:\n${mermaidSource}`,
     );
+  }
+
+  // Add layout directives after validation so corrected source is what gets rendered.
+  let finalMermaidSource = mermaidSource;
+  if (finalMermaidSource.startsWith('flowchart') || finalMermaidSource.startsWith('graph')) {
+    finalMermaidSource = `%%{init: {"flowchart": {"nodeSpacing": 100, "rankSpacing": 150}}}%%\n${finalMermaidSource}`;
   }
 
   const formats = options.config?.defaultOutput || config.defaultOutput || ['svg', 'mmd'];

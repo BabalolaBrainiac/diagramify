@@ -29,7 +29,11 @@ function applyThemeVars(svg: string, themeName?: string, darkMode?: boolean): st
 }
 
 function detectDiagramType(mermaidSource: string): DiagramType {
-  const source = mermaidSource.trim().toLowerCase();
+  const source = mermaidSource
+    .trim()
+    .replace(/^%%\{[\s\S]*?\}%%\s*/, '')
+    .trim()
+    .toLowerCase();
 
   if (source.startsWith('flowchart') || source.startsWith('graph')) {
     return 'flowchart';
@@ -37,13 +41,13 @@ function detectDiagramType(mermaidSource: string): DiagramType {
   if (source.startsWith('sequencediagram')) {
     return 'sequence';
   }
-  if (source.startsWith('classDiagram')) {
+  if (source.startsWith('classdiagram')) {
     return 'class';
   }
-  if (source.startsWith('erDiagram')) {
+  if (source.startsWith('erdiagram')) {
     return 'er';
   }
-  if (source.startsWith('stateDiagram')) {
+  if (source.startsWith('statediagram')) {
     return 'state';
   }
   if (source.startsWith('xychart-beta')) {

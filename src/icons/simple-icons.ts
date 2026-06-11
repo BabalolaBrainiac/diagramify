@@ -597,15 +597,6 @@ export function getFallbackSVG(label: string, color: string = '#999999'): string
   </svg>`;
 }
 
-function shouldUseLightText(hexColor: string): boolean {
-  const hex = hexColor.replace('#', '');
-  const r = parseInt(hex.substr(0, 2), 16);
-  const g = parseInt(hex.substr(2, 2), 16);
-  const b = parseInt(hex.substr(4, 2), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance < 0.5;
-}
-
 export function hasServiceMapping(service: string): boolean {
   return Boolean(serviceToSlugMap[service.toLowerCase().trim()]);
 }

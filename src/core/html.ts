@@ -95,6 +95,15 @@ function escapeHTML(s: string): string {
   );
 }
 
+function serializeForScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 function getServiceInfo(label: string): ServiceInfo {
   const normalized = label.toLowerCase();
   const def = getServiceDefinition(normalized);
@@ -120,7 +129,7 @@ function renderNodeCard(node: LayoutNode): string {
   const cx = node.x + node.width / 2;
   const cy = node.y + node.height / 2;
 
-  return `<div class="dfy-node service-${info.type}" data-id="${escapeHTML(node.id)}" data-cx="${cx}" data-cy="${cy}"
+  return `<div class="dfy-node service-${info.type}" data-id="${escapeHTML(node.id)}" data-label="${escapeHTML(node.label)}" data-type="${escapeHTML(info.type)}" data-cx="${cx}" data-cy="${cy}"
     style="--brand:${info.color};--brand-bg:${info.bgColor};">
     <div class="dfy-icon">${iconHTML}</div>
     <div class="dfy-label-wrap"><div class="dfy-label">${escapeHTML(node.label)}</div></div>
@@ -133,14 +142,10 @@ function renderSubgraph(sg: LayoutSubgraph): string {
   const y = sg.y + pad;
   const w = Math.max(20, sg.width - pad * 2);
   const h = Math.max(20, sg.height - pad * 2);
-  return `<div class="dfy-subgraph" data-id="${escapeHTML(sg.id)}"
+  return `<div class="dfy-subgraph" data-id="${escapeHTML(sg.id)}" data-label="${escapeHTML(sg.label)}"
     style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;">
     <div class="dfy-subgraph-label">${escapeHTML(sg.label)}</div>
   </div>`;
-}
-
-function stripNodesFromSVG(svg: string): string {
-  return svg.replace(/<g\s+class="node"[\s\S]*?<\/g>/g, '');
 }
 
 function simplifyEdgeLabel(label?: string): string {
@@ -184,8 +189,6 @@ export function generateInteractiveHTML(
   // Serialize layout data for the client script
   const NODE_DATA = layout.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, w: n.width, h: n.height }));
   const EDGE_DATA = layout.edges.map((e) => ({ from: e.from, to: e.to, label: simplifyEdgeLabel(e.label), dashed: e.dashed }));
-
-  const escapedMermaid = mermaidSource.replace(/`/g, '\\`').replace(/\$/g, '\\$');
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="${initialTheme}">
@@ -443,11 +446,11 @@ export function generateInteractiveHTML(
     </div>
   </div>
   <script>
-    const NODES = ${JSON.stringify(NODE_DATA)};
-    const EDGES = ${JSON.stringify(EDGE_DATA)};
-    const VIEWBOX = ${JSON.stringify(layout.viewBox)};
-    const MERMAID_SRC = \`${escapedMermaid}\`;
-    const TITLE_SAFE = ${JSON.stringify(title.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'diagram')};
+    const NODES = ${serializeForScript(NODE_DATA)};
+    const EDGES = ${serializeForScript(EDGE_DATA)};
+    const VIEWBOX = ${serializeForScript(layout.viewBox)};
+    const MERMAID_SRC = ${serializeForScript(mermaidSource)};
+    const TITLE_SAFE = ${serializeForScript(title.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'diagram')};
     const canvas = document.getElementById('canvas');
     const edgesGroup = document.getElementById('edges-group');
     const cardMap = {};
@@ -885,11 +888,17 @@ export function generateInteractiveHTML(
         labelEl.style.gap = '6px';
         labelEl.style.padding = '5px 0';
         labelEl.style.cursor = 'pointer';
-        labelEl.innerHTML = \`<input type="checkbox" checked data-sg="\${sgId}" style="margin:0;cursor:pointer;"/> \${label}\`;
-        labelEl.querySelector('input').addEventListener('change', e => {
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        checkbox.dataset.sg = sgId;
+        checkbox.style.margin = '0';
+        checkbox.style.cursor = 'pointer';
+        labelEl.append(checkbox, document.createTextNode(' ' + label));
+        checkbox.addEventListener('change', e => {
           const show = e.target.checked;
-          document.querySelectorAll(\`[data-subgraph="\${sgId}"]\`).forEach(el => {
-            el.style.display = show ? '' : 'none';
+          document.querySelectorAll('[data-subgraph]').forEach(el => {
+            if (el.getAttribute('data-subgraph') === sgId) el.style.display = show ? '' : 'none';
           });
           drawEdges();
         });
@@ -919,12 +928,25 @@ export function generateInteractiveHTML(
           const connectedEdges = EDGES.filter(e => e.from === nodeId || e.to === nodeId);
           const incoming = connectedEdges.filter(e => e.to === nodeId).map(e => cardMap[e.from]?.dataset.label || e.from);
           const outgoing = connectedEdges.filter(e => e.from === nodeId).map(e => cardMap[e.to]?.dataset.label || e.to);
-          detailContent.innerHTML = \`
-            <h2>\${nodeLabel}</h2>
-            <div class="badge">\${nodeType || 'Service'}</div>
-            \${incoming.length ? \`<div style="margin-top:12px;"><strong>Incoming:</strong> \${incoming.join(', ')}</div>\` : ''}
-            \${outgoing.length ? \`<div style="margin-top:8px;"><strong>Outgoing:</strong> \${outgoing.join(', ')}</div>\` : ''}
-          \`;
+          detailContent.replaceChildren();
+          const heading = document.createElement('h2');
+          heading.textContent = nodeLabel || '';
+          const badge = document.createElement('div');
+          badge.className = 'badge';
+          badge.textContent = nodeType || 'Service';
+          detailContent.append(heading, badge);
+          if (incoming.length) {
+            const incomingEl = document.createElement('div');
+            incomingEl.style.marginTop = '12px';
+            incomingEl.textContent = 'Incoming: ' + incoming.join(', ');
+            detailContent.appendChild(incomingEl);
+          }
+          if (outgoing.length) {
+            const outgoingEl = document.createElement('div');
+            outgoingEl.style.marginTop = '8px';
+            outgoingEl.textContent = 'Outgoing: ' + outgoing.join(', ');
+            detailContent.appendChild(outgoingEl);
+          }
           detailPanel.classList.add('visible');
         });
       });

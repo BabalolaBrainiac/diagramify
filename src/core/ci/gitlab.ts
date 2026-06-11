@@ -17,7 +17,7 @@ export function generateGitLabCI(options: GitLabCIOptions): string {
     - ${branch}
   script:
     - npm ci || npm install
-    - npx diagramify generate --path . --outdir ${outPath} --out html,svg,png
+    - npx diagramify-ai generate --path . --outdir ${outPath} --out html,svg,png
 `;
 
   if (options.commitDiagrams) {

@@ -3,7 +3,7 @@
 ## Generate
 
 ```typescript
-import { generateDiagram } from 'diagramify';
+import { generateDiagram } from 'diagramify-ai';
 
 const result = await generateDiagram({
   input: 'codebase',
@@ -26,7 +26,7 @@ For description input, set `input: 'description'` and supply `description`. Requ
 ## Render
 
 ```typescript
-import { renderDiagram } from 'diagramify';
+import { renderDiagram } from 'diagramify-ai';
 
 const result = await renderDiagram(source, ['svg', 'html', 'png'], {
   theme: 'dark',
@@ -40,7 +40,7 @@ The result contains `mermaid`, `diagramType`, and the requested output fields. P
 ## Analyze Without An LLM
 
 ```typescript
-import { analyzeCodebase } from 'diagramify';
+import { analyzeCodebase } from 'diagramify-ai';
 
 const analysis = await analyzeCodebase('.', 100);
 console.log(analysis.entryPoints);
@@ -68,7 +68,7 @@ The package root also exports:
 The React export is named `DiagramViewer`:
 
 ```tsx
-import { DiagramViewer } from 'diagramify/react';
+import { DiagramViewer } from 'diagramify-ai/react';
 
 export function Architecture({ source }: { source: string }) {
   return (

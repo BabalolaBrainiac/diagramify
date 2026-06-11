@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { parseMermaidSource } from '../../core/parse.js';
 import { computeDiff, generateDiffHTML, generateDiffMermaid } from '../../core/diff.js';
@@ -28,21 +28,28 @@ export function makeDiffCommand(): Command {
       console.log(`Diff stats: +${diff.stats.added} -${diff.stats.removed} ~${diff.stats.unchanged}`);
       
       const formats = options.out.split(',');
+      await mkdir(options.outdir, { recursive: true });
+      const diffSource = generateDiffMermaid(beforeGraph, diff);
       
       if (formats.includes('mmd')) {
-        const mmd = generateDiffMermaid(beforeGraph, diff);
-        await writeFile(join(options.outdir, `${options.name}.mmd`), mmd);
+        await writeFile(join(options.outdir, `${options.name}.mmd`), diffSource);
         console.log(`Wrote ${options.outdir}/${options.name}.mmd`);
       }
       
       if (formats.includes('html') || formats.includes('svg')) {
         const beforeRender = await renderDiagram(beforeSrc, ['svg'], { theme: options.theme });
         const afterRender = await renderDiagram(afterSrc, ['svg'], { theme: options.theme });
+        const diffRender = await renderDiagram(diffSource, ['svg'], { theme: options.theme });
         
         if (formats.includes('html')) {
           const html = generateDiffHTML(diff, beforeRender.svg || '', afterRender.svg || '', { theme: options.theme });
           await writeFile(join(options.outdir, `${options.name}.html`), html);
           console.log(`Wrote ${options.outdir}/${options.name}.html`);
+        }
+
+        if (formats.includes('svg') && diffRender.svg) {
+          await writeFile(join(options.outdir, `${options.name}.svg`), diffRender.svg);
+          console.log(`Wrote ${options.outdir}/${options.name}.svg`);
         }
       }
     });

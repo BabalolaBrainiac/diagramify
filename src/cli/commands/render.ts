@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, resolve, dirname } from 'path';
+import { join, resolve } from 'path';
 import { renderDiagram } from '../../core/render.js';
 import type { OutputFormat, RenderOptions } from '../../core/types.js';
 
