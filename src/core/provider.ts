@@ -42,6 +42,12 @@ function getApiKeyEnvVar(provider: ProviderName): string {
   return envMap[provider];
 }
 
+/** True for Gemini 2.5 models which use thinking tokens that eat into the output budget. */
+function isGeminiThinkingModel(model: LanguageModel): boolean {
+  const id = (model as any).modelId as string | undefined;
+  return typeof id === 'string' && /gemini-2\.5/.test(id);
+}
+
 export async function callLLM(
   model: LanguageModel,
   systemPrompt: string,
@@ -49,12 +55,19 @@ export async function callLLM(
   maxTokens?: number,
   temperature?: number,
 ): Promise<{ text: string; tokensUsed: number }> {
+  // For Gemini 2.5 thinking models, disable thinking budget so all output tokens go to text.
+  // Without this, the model spends most tokens on hidden reasoning, truncating diagram output.
+  const providerOptions = isGeminiThinkingModel(model)
+    ? { google: { thinkingConfig: { thinkingBudget: 0 } } }
+    : undefined;
+
   const result = await generateText({
     model,
     system: systemPrompt,
     prompt: userPrompt,
     temperature: temperature ?? 0.7,
     maxTokens: maxTokens,
+    ...(providerOptions ? { providerOptions } : {}),
   });
 
   return {

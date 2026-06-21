@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import { loadConfig } from '../core/config.js';
 import { renderDiagram } from '../core/render.js';
 import { generateGitHubActionsWorkflow } from '../core/ci/github.js';
@@ -51,5 +52,25 @@ describe('release readiness regressions', () => {
     expect(generateGitHubActionsWorkflow({})).toContain('npx diagramify-ai generate');
     expect(generateGitLabCI({})).toContain('npx diagramify-ai generate');
     expect(generatePrecommitHook()).toContain('npx diagramify-ai generate');
+  });
+
+  it('renders PNG output with nonblank pixels', async () => {
+    const result = await renderDiagram('flowchart LR\nA[API] --> B[PostgreSQL]', ['png'], {
+      theme: 'dark',
+      width: 800,
+    });
+
+    expect(result.png).toBeDefined();
+
+    const { data, info } = await sharp(result.png).raw().toBuffer({ resolveWithObject: true });
+    let nonBlackPixels = 0;
+
+    for (let i = 0; i < data.length; i += info.channels) {
+      if (data[i] > 15 || data[i + 1] > 15 || data[i + 2] > 15) {
+        nonBlackPixels++;
+      }
+    }
+
+    expect(nonBlackPixels).toBeGreaterThan(0);
   });
 });

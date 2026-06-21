@@ -2,28 +2,54 @@ node_modules
 dist
 build
 .DS_Store
+
+# ─── Secrets & environment ────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
+*.env
+*.secret
+*.key
+*.pem
+*.p12
+*.pfx
+diagramify.config.ts
+
+# ─── Agent / planning docs (not for public repo) ──────────────────────────────
+HANDOFF.md
+HANDOFF*.md
+implementation_plan.md
+walkthrough.md
+task.md
+
+# ─── Generated example / dev output ──────────────────────────────────────────
+examples/
+diagrams/
+earlybird-diagrams/
+out/
+
+# ─── Pack artifacts ───────────────────────────────────────────────────────────
+*.tgz
+*.tar.gz
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
+
+# ─── Editor ───────────────────────────────────────────────────────────────────
 .vscode
 .idea
 *.swp
 *.swo
+
+# ─── Test / build artifacts ───────────────────────────────────────────────────
 coverage
 .nyc_output
 *.tsbuildinfo
 
-# Generated diagram output (dev artifacts)
-diagrams/
-earlybird-diagrams/
-
-# Local config scaffolded by diagramify init
-diagramify.config.ts
-
-# Scratch / patch scripts
+# ─── Scratch / patch scripts ──────────────────────────────────────────────────
 patch*.js
 patch*.cjs
 generate-*.js

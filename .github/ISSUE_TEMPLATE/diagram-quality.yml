@@ -1,0 +1,73 @@
+name: Diagram quality
+description: The generated diagram is missing services, connections, layers, or is structurally wrong
+title: "[Quality]: "
+labels: ["diagram-quality", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Include the generated `.mmd` file and, if possible, a screenshot of the HTML output.
+        Do **not** include API keys, credentials, or private source code.
+  - type: dropdown
+    id: language
+    attributes:
+      label: Repository language
+      description: What is the primary language of the codebase you ran Diagramify against?
+      options:
+        - TypeScript / JavaScript
+        - Python
+        - Go
+        - Java / Kotlin
+        - C# / .NET
+        - Rust
+        - Ruby
+        - PHP
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Framework / runtime
+      description: e.g. Next.js, Spring Boot, FastAPI, ASP.NET Core
+      placeholder: "e.g. ASP.NET Core 8 with MassTransit"
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected nodes / edges
+      description: List the services, databases, queues, or connections you expected to appear.
+      placeholder: |
+        - Nodes: API, PostgreSQL, Redis, RabbitMQ, Keycloak
+        - Edges: API → PostgreSQL (SQL), API → RabbitMQ (publish)
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What was actually generated
+      description: Paste the generated `.mmd` source here (or describe what was missing/wrong).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command used
+      description: The exact `diagramify generate` command you ran.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Diagramify version
+      placeholder: "0.2.1"
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: LLM provider used
+      placeholder: "e.g. anthropic, google, openai"
+    validations:
+      required: true

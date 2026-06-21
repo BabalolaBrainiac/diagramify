@@ -18,7 +18,7 @@ Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three
 - **Multiple output formats** — `html`, `svg`, `png`, `jpeg`, `mmd`
 - **Diagram diffing** — `diagramify diff` compares two `.mmd` files and highlights changes
 - **CI integration** — `diagramify ci` generates GitHub Actions / GitLab CI workflows
-- **Hot-reload preview** — `diagramify preview` serves and auto-refreshes on file changes
+- **Hot-reload preview** — `diagramify preview` and `diagramify watch` serve and auto-reload on file changes via WebSocket
 - **LLM-agnostic** — Claude, OpenAI, or Google Gemini
 - **React component** — embed the interactive viewer in any React app
 - **No browser required** — pure TypeScript rendering, no Puppeteer
@@ -74,11 +74,30 @@ diagramify generate \
 diagramify render diagram.mmd --out html,svg,png
 ```
 
-### Hot-reload preview
+### Commands at a glance
+
+| Command | Purpose | Hot-reload? | WebSocket? |
+|---------|---------|------------|------------|
+| `diagramify generate` | AI-generate from codebase or description | — | — |
+| `diagramify render` | Render an existing `.mmd` file | — | — |
+| `diagramify preview [--file]` | Interactive editor with POST API; file watching with `--file` | ✅ | ✅ |
+| `diagramify watch <file>` | Lightweight `.mmd` file watcher; no Express | ✅ | ✅ |
+| `diagramify dev [--file]` | Alias for `preview` — recommended entry point for dev workflows | ✅ | ✅ |
+| `diagramify diff` | Compare two `.mmd` files visually | — | — |
+| `diagramify ci` | Generate CI workflow files | — | — |
+| `diagramify init` | Scaffold a config file | — | — |
+
+> **When to use `watch` vs `preview`:**
+> - `watch <file>` — fastest feedback loop for editing a `.mmd` file; no Express, low overhead
+> - `preview --file <path>` (or `dev --file <path>`) — same file-watch experience **plus** the POST `/api/update` API for tool integrations and the interactive upload mode when `--file` is omitted
 
 ```bash
-diagramify preview --file diagram.mmd --port 3050
-# Open http://localhost:3050 — auto-refreshes on file changes
+# Fastest .mmd edit loop
+diagramify watch diagram.mmd --open
+
+# Interactive editor + POST API
+diagramify preview --file diagram.mmd --open
+# or: diagramify dev --file diagram.mmd --open
 ```
 
 ---
@@ -132,7 +151,7 @@ diagramify render <input.mmd> [options]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--out <formats>` | `svg` | `html,svg,png,jpeg,mmd` |
+| `--out <formats>` | `svg,html` | `html,svg,png,jpeg,mmd` |
 | `--outdir <dir>` | input file dir | Output directory |
 | `--name <name>` | `diagram` | Output filename |
 | `--theme <name>` | `light` | `light`, `dark`, `tokyo-night`, `nord`, `catppuccin` |
@@ -150,19 +169,43 @@ diagramify render diagram.mmd --out png --width 2400
 
 ---
 
-### `diagramify preview`
+### `diagramify preview` / `diagramify dev`
 
-Start a hot-reloading preview server for a `.mmd` file.
+Interactive diagram editor with WebSocket hot-reload. `dev` is an alias for `preview`.
 
 ```
-diagramify preview --file <path> [--port <n>]
+diagramify preview [--file <path>] [--port <n>] [--theme <t>] [--open]
+diagramify dev    [--file <path>] [--port <n>] [--theme <t>] [--open]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--file <path>` | — | Watch a `.mmd` file and hot-reload on every save |
+| `--port <n>` | `3000` | HTTP server port (WebSocket on port+1) |
+| `--theme <t>` | `light` | Diagram theme |
+| `--open` | — | Open browser automatically |
+
+```bash
+diagramify dev --file diagram.mmd --open
+```
+
+POST Mermaid source to `/api/update` to update the diagram programmatically. Hot-reload is broadcast to all open browser tabs.
+
+Keyboard shortcuts: `T` theme · `E` edit · `L` legend · `H` hide edges · `R` reset · `/` search · `Del` delete node
+
+---
+
+### `diagramify watch`
+
+Lightweight `.mmd` file watcher — HTTP server + WebSocket hot-reload only. No Express dependency.
+
+```
+diagramify watch <file> [--port <n>] [--theme <t>] [--open] [--outdir <dir>]
 ```
 
 ```bash
-diagramify preview --file diagram.mmd --port 3050
+diagramify watch diagram.mmd --open --theme dark
 ```
-
-Keyboard shortcuts in the browser: `T` theme · `E` edit · `L` legend · `H` hide edges · `R` reset · `/` search · `Del` delete node
 
 ---
 

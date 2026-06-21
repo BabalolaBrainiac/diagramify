@@ -162,6 +162,9 @@ export function getTheme(themeName?: string, mode: ThemeMode = 'light'): Diagram
  */
 export function generateThemeCSS(theme: DiagramTheme): string {
   const { colors, typography, shadow } = theme;
+  const shadowRgb = colors.shadow.replace('#', '').match(/.{1,2}/g)
+    ?.map((value) => parseInt(value, 16))
+    .join(', ') || '0, 0, 0';
 
   return `
     :root {
@@ -184,48 +187,48 @@ export function generateThemeCSS(theme: DiagramTheme): string {
     }
 
     body {
-      background-color: var(--diagram-bg);
-      color: var(--diagram-text);
-      font-family: var(--diagram-font-family);
-      font-size: var(--diagram-font-size);
-      font-weight: var(--diagram-font-weight);
-      line-height: var(--diagram-line-height);
+      background-color: ${colors.background};
+      color: ${colors.text};
+      font-family: ${typography.fontFamily};
+      font-size: ${typography.fontSize}px;
+      font-weight: ${typography.fontWeight};
+      line-height: ${typography.lineHeight};
     }
 
     svg {
-      background-color: var(--diagram-bg);
-      color: var(--diagram-text);
+      background-color: ${colors.background};
+      color: ${colors.text};
     }
 
     .node {
-      fill: var(--diagram-node-bg);
-      stroke: var(--diagram-node-border);
+      fill: ${colors.nodeBackground};
+      stroke: ${colors.nodeBorder};
       stroke-width: 1.5px;
-      filter: drop-shadow(var(--diagram-shadow-x) var(--diagram-shadow-y) var(--diagram-shadow-blur) rgba(var(--diagram-shadow), var(--diagram-shadow-opacity)));
+      filter: drop-shadow(${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blur}px rgba(${shadowRgb}, ${shadow.opacity}));
     }
 
     .node text {
-      fill: var(--diagram-text);
-      font-family: var(--diagram-font-family);
-      font-size: var(--diagram-font-size);
-      font-weight: var(--diagram-font-weight);
+      fill: ${colors.text};
+      font-family: ${typography.fontFamily};
+      font-size: ${typography.fontSize}px;
+      font-weight: ${typography.fontWeight};
     }
 
     .edgePath path {
-      stroke: var(--diagram-edge-stroke);
+      stroke: ${colors.edgeStroke};
       stroke-width: 1.5px;
       fill: none;
     }
 
     .edgeLabel {
-      fill: var(--diagram-edge-label);
-      font-family: var(--diagram-font-family);
-      font-size: calc(var(--diagram-font-size) * 0.85);
+      fill: ${colors.edgeLabel};
+      font-family: ${typography.fontFamily};
+      font-size: ${Math.round(typography.fontSize * 0.85)}px;
     }
 
     .label {
-      fill: var(--diagram-text);
-      background-color: var(--diagram-node-bg);
+      fill: ${colors.text};
+      background-color: ${colors.nodeBackground};
     }
   `;
 }

@@ -1,0 +1,62 @@
+name: Rendering / output bug
+description: SVG, PNG, JPEG, or HTML output is wrong, blank, corrupted, or not generated
+title: "[Render]: "
+labels: ["rendering", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please attach the output file(s) if possible. Do not include API keys or private code.
+  - type: dropdown
+    id: format
+    attributes:
+      label: Affected output format(s)
+      multiple: true
+      options:
+        - svg
+        - png
+        - jpeg
+        - html
+        - mmd
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command used
+      description: The exact `diagramify render` or `diagramify generate` command you ran.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: mermaid-source
+    attributes:
+      label: Mermaid source (if using `render`)
+      description: Paste the `.mmd` source that triggered the bug, or a minimal reproduction.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Diagramify version
+      placeholder: "0.2.1"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: "20.x"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, sharp version (run `npm ls sharp`), and any other relevant details.

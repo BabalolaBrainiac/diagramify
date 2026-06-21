@@ -1,0 +1,37 @@
+name: Missing or wrong icon / service
+description: A service node is showing the wrong icon, a generic icon, or no icon at all
+title: "[Icon]: "
+labels: ["icon", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve service recognition. Include a screenshot if you have one.
+  - type: input
+    id: service-name
+    attributes:
+      label: Service / technology name
+      description: The exact label that appeared in the generated diagram
+      placeholder: "e.g. RabbitMQ, Serilog, Keycloak"
+    validations:
+      required: true
+  - type: input
+    id: expected-icon
+    attributes:
+      label: Expected icon slug (if known)
+      description: The Simple Icons slug — check https://simpleicons.org for the slug
+      placeholder: "e.g. rabbitmq, serilog"
+  - type: textarea
+    id: current-render
+    attributes:
+      label: What is currently rendered
+      description: Describe what icon (or no icon) is shown. Attach a screenshot if possible.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Diagramify version
+      placeholder: "0.2.1"
+    validations:
+      required: true

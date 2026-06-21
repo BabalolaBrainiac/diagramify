@@ -35,10 +35,24 @@ GROUPING — always use subgraphs. Pick from this set; add domain-specific ones 
   subgraph auth [Auth]                   ← Auth0, Cognito, Clerk
   subgraph external [External APIs]      ← Stripe, Twilio, etc.
 
-EDGES — every edge tells a story.
+EDGES — this is the most critical part. Every node MUST have at least one edge. No floating isolated nodes.
 - Solid:  A -->|REST| B            for synchronous HTTP / gRPC / SQL / cache lookups
 - Dashed: A -.->|events| B         for async / pub-sub / queues / webhooks / event-driven
-- Always LABEL the edge with what crosses it: REST, gRPC, SQL, events, webhook, scrapes, cache, inference, SSR, OIDC, OAuth.
+- Always LABEL the edge with what crosses it: REST, gRPC, SQL, events, webhook, scrapes, cache, inference, SSR, OIDC, OAuth, calls, uses, imports.
+
+INTRA-BACKEND WIRING (critical — this is always missing and must be explicit):
+- For every module or service that follows Clean Architecture / DDD / layered architecture (Presentation → Application → Domain → Infrastructure), you MUST wire those layers explicitly:
+    ModuleX_Presentation -->|calls| ModuleX_Application
+    ModuleX_Application -->|calls| ModuleX_Domain
+    ModuleX_Application -->|calls| ModuleX_Infrastructure
+    ModuleX_Infrastructure -->|SQL| PostgreSQL
+- The API host MUST have edges INTO each module's presentation or controller layer.
+- Shared/Common layers (Common.Application, Common.Domain, Common.Infrastructure) must be explicitly connected FROM each module that depends on them:
+    ModuleX_Application -->|uses| Common_Application
+    ModuleX_Domain -->|extends| Common_Domain
+- Middleware components must connect from the host to whatever they validate against (e.g. AuthMiddleware -->|OIDC| Keycloak).
+- Workers, consumers, and background jobs must connect to the queues or schedulers they consume from.
+- Do NOT leave any node floating without at least one incoming or outgoing edge.
 
 ANTI-PATTERNS — do not do these.
 - Generic labels: "Database", "Service", "Cache", "Queue", "API", "Backend", "Frontend". Use specific, precise names.
@@ -46,7 +60,8 @@ ANTI-PATTERNS — do not do these.
 - Lumping multiple services into one node: split "AWS" into the specific services (Lambda, S3, RDS).
 - Skipping observability or auth because they are "boring infrastructure" — include them.
 - Fewer than 15 nodes for any non-trivial codebase.
-- Unlabeled edges when a label would clarify the protocol or async/sync semantics.`;
+- Unlabeled edges when a label would clarify the protocol or async/sync semantics.
+- Nodes that have ZERO edges. Every node must be connected.`;
 
 function stripMarkdownFences(text: string): string {
   return text.replace(/^```(?:mermaid)?\n?|\n?```$/gm, '').trim();
@@ -167,7 +182,7 @@ IMPORTANT: ${startInstruction}`;
   // Add layout directives after validation so corrected source is what gets rendered.
   let finalMermaidSource = mermaidSource;
   if (finalMermaidSource.startsWith('flowchart') || finalMermaidSource.startsWith('graph')) {
-    finalMermaidSource = `%%{init: {"flowchart": {"nodeSpacing": 100, "rankSpacing": 150}}}%%\n${finalMermaidSource}`;
+    finalMermaidSource = `%%{init: {"flowchart": {"nodeSpacing": 40, "rankSpacing": 70, "curve": "basis"}}}%%\n${finalMermaidSource}`;
   }
 
   const formats = options.config?.defaultOutput || config.defaultOutput || ['svg', 'mmd'];

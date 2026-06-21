@@ -19,12 +19,12 @@ function applyThemeVars(svg: string, themeName?: string, darkMode?: boolean): st
   if (/<svg[^>]*\sstyle="/.test(svg)) {
     return svg.replace(
       /<svg([^>]*)\sstyle="[^"]*"/,
-      `<svg$1 style="--bg:${p.bg};--fg:${p.fg};--line:${p.line};--accent:${p.accent};background:var(--bg)"`,
+      `<svg$1 style="--bg:${p.bg};--fg:${p.fg};--line:${p.line};--accent:${p.accent};background:${p.bg}"`,
     );
   }
   return svg.replace(
     /<svg([^>]*?)>/,
-    `<svg$1 style="--bg:${p.bg};--fg:${p.fg};--line:${p.line};--accent:${p.accent};background:var(--bg)">`,
+    `<svg$1 style="--bg:${p.bg};--fg:${p.fg};--line:${p.line};--accent:${p.accent};background:${p.bg}">`,
   );
 }
 

@@ -13,7 +13,7 @@ const DEFAULTS: DiagramifyConfig = {
   theme: 'default',
   defaultOutput: ['svg', 'mmd'],
   temperature: 0.7,
-  maxTokens: 4096,
+  maxTokens: 8192,
 };
 
 async function loadConfigFile(): Promise<Partial<DiagramifyConfig> | null> {

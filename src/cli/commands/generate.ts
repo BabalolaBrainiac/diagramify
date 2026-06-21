@@ -4,6 +4,24 @@ import { join, resolve } from 'path';
 import { generateDiagram } from '../../core/generate.js';
 import type { GenerateOptions, OutputFormat, DiagramType } from '../../core/types.js';
 
+const VALID_OUTPUT_FORMATS = new Set<OutputFormat>(['svg', 'png', 'jpeg', 'html', 'mmd']);
+
+function parseOutputFormats(value: string | undefined, defaults: OutputFormat[]): OutputFormat[] {
+  const formats = value
+    ? value.split(',').map((f: string) => f.trim().toLowerCase()).filter(Boolean)
+    : defaults;
+
+  const invalid = formats.filter((format) => !VALID_OUTPUT_FORMATS.has(format as OutputFormat));
+  if (invalid.length > 0) {
+    throw new Error(
+      `Unsupported output format${invalid.length === 1 ? '' : 's'}: ${invalid.join(', ')}. ` +
+      `Supported formats: ${Array.from(VALID_OUTPUT_FORMATS).join(', ')}`,
+    );
+  }
+
+  return formats as OutputFormat[];
+}
+
 export const generateCommand = new Command()
   .name('generate')
   .description('Analyze a codebase or description and generate a diagram')
@@ -30,9 +48,7 @@ export const generateCommand = new Command()
       const outDir = options.outdir ? resolve(options.outdir) : process.cwd();
       const baseName = options.name || 'diagram';
 
-      const formats = options.out
-        ? options.out.split(',').map((f: string) => f.trim().toLowerCase())
-        : ['svg', 'html', 'mmd'];
+      const formats = parseOutputFormats(options.out, ['svg', 'html', 'mmd']);
 
       const generateOptions: GenerateOptions = {
         input: options.description ? 'description' : 'codebase',
@@ -44,7 +60,7 @@ export const generateCommand = new Command()
           model: options.model,
           theme: options.theme,
           darkMode: options.dark ?? false,
-          defaultOutput: formats as OutputFormat[],
+          defaultOutput: formats,
           direction: options.direction as any,
         },
       };

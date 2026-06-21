@@ -1,0 +1,59 @@
+name: Analyzer miss
+description: The static analyzer failed to detect a framework, service, module, or dependency
+title: "[Analyzer]: "
+labels: ["analyzer", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The analyzer runs before the LLM and extracts structural evidence from your repo.
+        If it misses something, the LLM has no evidence to work with, so this is high impact.
+        Please paste the JSON output of `analyzeCodebase()` or the CLI `--dry-run` output.
+  - type: dropdown
+    id: language
+    attributes:
+      label: Repository language
+      options:
+        - TypeScript / JavaScript
+        - Python
+        - Go
+        - Java / Kotlin
+        - C# / .NET
+        - Rust
+        - Ruby
+        - PHP
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Framework / runtime
+      placeholder: "e.g. ASP.NET Core, Spring Boot, FastAPI"
+    validations:
+      required: true
+  - type: textarea
+    id: missed
+    attributes:
+      label: What was missed
+      description: Describe the framework, service, module, or dependency that was not detected.
+      placeholder: |
+        - Expected `detectedServices` to include: MassTransit, Quartz
+        - Expected `serviceDirectories` to include: Notifications, Reference
+    validations:
+      required: true
+  - type: textarea
+    id: analyzer-output
+    attributes:
+      label: Actual analyzeCodebase() / analyzer output
+      description: Run the Node.js snippet from the README or HANDOFF to get this JSON. Paste it here.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Diagramify version
+      placeholder: "0.2.1"
+    validations:
+      required: true

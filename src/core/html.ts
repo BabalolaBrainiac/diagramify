@@ -129,7 +129,7 @@ function renderNodeCard(node: LayoutNode): string {
   const cx = node.x + node.width / 2;
   const cy = node.y + node.height / 2;
 
-  return `<div class="dfy-node service-${info.type}" data-id="${escapeHTML(node.id)}" data-label="${escapeHTML(node.label)}" data-type="${escapeHTML(info.type)}" data-cx="${cx}" data-cy="${cy}"
+  return `<div class="dfy-node service-${info.type}" data-id="${escapeHTML(node.id)}" data-node-id="${escapeHTML(node.id)}" data-label="${escapeHTML(node.label)}" data-type="${escapeHTML(info.type)}" data-cx="${cx}" data-cy="${cy}"
     style="--brand:${info.color};--brand-bg:${info.bgColor};">
     <div class="dfy-icon">${iconHTML}</div>
     <div class="dfy-label-wrap"><div class="dfy-label">${escapeHTML(node.label)}</div></div>
@@ -142,7 +142,8 @@ function renderSubgraph(sg: LayoutSubgraph): string {
   const y = sg.y + pad;
   const w = Math.max(20, sg.width - pad * 2);
   const h = Math.max(20, sg.height - pad * 2);
-  return `<div class="dfy-subgraph" data-id="${escapeHTML(sg.id)}" data-label="${escapeHTML(sg.label)}"
+  // data-subgraph is used by the layer panel toggle to show/hide this group
+  return `<div class="dfy-subgraph" data-id="${escapeHTML(sg.id)}" data-label="${escapeHTML(sg.label)}" data-subgraph="${escapeHTML(sg.id)}"
     style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;">
     <div class="dfy-subgraph-label">${escapeHTML(sg.label)}</div>
   </div>`;
@@ -183,8 +184,8 @@ export function generateInteractiveHTML(
   const subgraphsHTML = layout.subgraphs.map(renderSubgraph).join('\n');
   const nodeCardsHTML = layout.nodes.map(renderNodeCard).join('\n');
 
-  const canvasW = layout.viewBox.w + 60;
-  const canvasH = layout.viewBox.h + 60;
+  const canvasW = layout.viewBox.w + 40;
+  const canvasH = layout.viewBox.h + 40;
 
   // Serialize layout data for the client script
   const NODE_DATA = layout.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, w: n.width, h: n.height }));
@@ -256,21 +257,23 @@ export function generateInteractiveHTML(
     .legend-label{flex:1;}
     .legend-detail{color:var(--text-muted);font-size:10px;}
     .canvas-wrap{flex:1;position:relative;overflow:auto;background:var(--bg);background-image:radial-gradient(circle at 1px 1px,color-mix(in srgb,var(--text) 8%,transparent) 1px,transparent 0);background-size:20px 20px;}
-    .canvas{position:relative;width:${canvasW}px;height:${canvasH}px;margin:30px;}
+    .canvas{position:relative;width:${canvasW}px;height:${canvasH}px;margin:16px;}
     .dfy-subgraph{position:absolute;border:1px solid var(--subgraph-border);background:var(--subgraph-bg);border-radius:10px;z-index:1;}
     .dfy-subgraph-label{position:absolute;top:10px;left:12px;font-size:12px;font-weight:600;color:var(--text);letter-spacing:0.01em;background:transparent;padding:0;cursor:text;user-select:none;}
     body.edit-mode .dfy-subgraph-label:hover{outline:1px dashed var(--edge-color-active);border-radius:2px;}
     .dfy-subgraph-label[contenteditable="true"]{outline:2px solid var(--edge-color-active);cursor:text;user-select:text;}
     .edges-svg{position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;transition:opacity 0.2s;}
     .edges-svg.hidden{opacity:0;}
-    .edge-group{pointer-events:none;transition:opacity 0.2s;}
-    .edge-path{fill:none;stroke:var(--edge-color);stroke-width:1.5;transition:all 0.15s;pointer-events:visibleStroke;cursor:pointer;}
+    .edge-group{pointer-events:stroke;transition:opacity 0.2s;cursor:pointer;}
+    .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer;pointer-events:visibleStroke;}
+    .edge-path{fill:none;stroke:var(--edge-color);stroke-width:1.8;transition:all 0.15s;pointer-events:none;}
     .edge-path.dashed{stroke-dasharray:5 5;}
-    .edge-label-text{font-size:10px;fill:var(--text-muted);font-weight:500;opacity:0;transition:opacity 0.15s;}
-    .edge-label-bg{fill:var(--bg);stroke:var(--subgraph-border);stroke-width:0.5;opacity:0;transition:opacity 0.15s;}
+    .edge-label-text{font-size:10px;fill:var(--text-muted);font-weight:500;opacity:0.6;transition:opacity 0.15s;}
+    .edge-label-bg{fill:var(--bg);stroke:var(--subgraph-border);stroke-width:0.5;opacity:0.6;transition:opacity 0.15s;}
     .edge-group:hover .edge-path, .edge-group.active .edge-path { stroke: var(--edge-color-active); stroke-width: 3; }
-    .edge-group:hover .edge-label-bg, .edge-group:hover .edge-label-text, .edge-group.active .edge-label-bg, .edge-group.active .edge-label-text { opacity: 1; pointer-events: auto; }
+    .edge-group:hover .edge-label-bg, .edge-group:hover .edge-label-text, .edge-group.active .edge-label-bg, .edge-group.active .edge-label-text { opacity: 1; }
     .edges-svg.has-active .edge-group:not(.active) { opacity: 0.15; }
+    /* Arrow marker inherits group color via currentColor */
     .dfy-node{position:absolute;display:flex;flex-direction:row;align-items:center;gap:8px;min-width:70px;max-width:200px;width:max-content;padding:6px 10px;border-radius:6px;background:var(--surface);border:1px solid color-mix(in srgb,var(--brand,#999) 25%,transparent);border-left:3px solid var(--brand,#999);box-shadow:0 1px 3px rgba(0,0,0,0.04),0 2px 6px color-mix(in srgb,var(--brand,#999) 6%,transparent);transition:transform 0.1s ease,box-shadow 0.1s ease;cursor:grab;z-index:10;user-select:none;transform:translate(-50%,-50%);}
     .dfy-node:hover{box-shadow:0 3px 10px rgba(0,0,0,0.08),0 6px 16px color-mix(in srgb,var(--brand,#999) 15%,transparent);z-index:20;transform:translate(-50%,calc(-50% - 2px));}
     .dfy-node.dragging{cursor:grabbing;transition:none;z-index:100;opacity:0.9;box-shadow:0 8px 24px rgba(0,0,0,0.12);}
@@ -379,11 +382,13 @@ export function generateInteractiveHTML(
       <h1>${escapeHTML(title)} <span class="subtitle">— ${layout.nodes.length} services · ${layout.subgraphs.length} tiers</span></h1>
       <span class="pill" id="theme-pill">${initialTheme}</span>
       <span class="pill" id="edit-pill" style="display:none">EDIT MODE</span>
+      <span class="pill" id="snap-pill" style="display:none;background:var(--edge-color-active);color:#fff">SNAP ON</span>
       <div class="btn-group">
         <button id="legend-btn" title="Toggle legend (L)">Legend</button>
         <button id="edges-btn" title="Toggle edges (H)">Edges</button>
         <button id="edit-btn" title="Edit labels (E)">Edit</button>
         <button id="theme-btn" title="Cycle theme (T)">Theme</button>
+        <button id="layout-btn" title="Reset layout to original (Alt+R)">Auto-layout</button>
         <select id="format-select" title="Export">
           <option value="">Export…</option>
           <option value="png">PNG (4×)</option>
@@ -391,14 +396,14 @@ export function generateInteractiveHTML(
           <option value="jpeg">JPEG</option>
           <option value="mmd">Mermaid (.mmd)</option>
         </select>
-        <button class="primary" id="reset-btn" title="Reset (R)">Reset</button>
+        <button class="primary" id="reset-btn" title="Reset zoom/pan (R)">Reset</button>
       </div>
     </div>
     <div class="main">
       <aside class="sidebar" id="sidebar">
-        <div class="dfy-search-wrap">
+        ${options.showSearch !== false ? `<div class="dfy-search-wrap">
           <input id="dfy-search" type="search" placeholder="Search nodes... (/)" />
-        </div>
+        </div>` : ''}
         <h3>Service Types</h3>
         <div class="legend-item" data-type="compute"><span class="legend-swatch" style="background:#ff9900"></span><span class="legend-label">Compute</span><span class="legend-detail">Lambda</span></div>
         <div class="legend-item" data-type="database"><span class="legend-swatch" style="background:#336791"></span><span class="legend-label">Database</span><span class="legend-detail">Postgres</span></div>
@@ -415,8 +420,8 @@ export function generateInteractiveHTML(
         <h3>Edges</h3>
         <div class="legend-item"><span class="legend-line"></span><span class="legend-label">Synchronous</span><span class="legend-detail">REST / SQL</span></div>
         <div class="legend-item"><span class="legend-line dashed"></span><span class="legend-label">Async / Event</span><span class="legend-detail">Queue / pub-sub</span></div>
-        <h3>Layers</h3>
-        <div id="layer-list" style="font-size:12px;"></div>
+        ${options.showLayerPanel !== false ? `<h3>Layers</h3>
+        <div id="layer-list" style="font-size:12px;"></div>` : ''}
         <h3>Interactions</h3>
         <div class="legend-item"><span class="legend-label">Click Legend</span><span class="legend-detail">highlight nodes</span></div>
         <div class="legend-item"><span class="legend-label">Drag</span><span class="legend-detail">card → reposition</span></div>
@@ -466,6 +471,32 @@ export function generateInteractiveHTML(
       });
       canvasWrap.addEventListener('wheel', pz.zoomWithWheel);
     }
+
+    // Fit-to-content: after first render, scale + pan so all nodes are visible
+    function fitToContent() {
+      if (!pz || !NODES.length) return;
+      const vpW = canvasWrap.clientWidth;
+      const vpH = canvasWrap.clientHeight;
+      // Use live card positions
+      const xs = [], ys = [], xe = [], ye = [];
+      document.querySelectorAll('.dfy-node').forEach(card => {
+        const cx = parseFloat(card.dataset.cx);
+        const cy = parseFloat(card.dataset.cy);
+        const hw = card.offsetWidth / 2, hh = card.offsetHeight / 2;
+        xs.push(cx - hw); ys.push(cy - hh);
+        xe.push(cx + hw); ye.push(cy + hh);
+      });
+      if (!xs.length) return;
+      const minX = Math.min(...xs), minY = Math.min(...ys);
+      const maxX = Math.max(...xe), maxY = Math.max(...ye);
+      const contentW = maxX - minX + 60;
+      const contentH = maxY - minY + 60;
+      const scale = Math.min(vpW / contentW, vpH / contentH, 1) * 0.92;
+      const panX = (vpW / 2) - (minX + contentW / 2) * scale;
+      const panY = (vpH / 2) - (minY + contentH / 2) * scale;
+      pz.zoom(scale, { animate: false });
+      pz.pan(panX, panY, { animate: false });
+    }
     
     document.querySelectorAll('.dfy-node').forEach(card => {
       const id = card.dataset.id;
@@ -487,26 +518,59 @@ export function generateInteractiveHTML(
         ? { x: a.x + Math.sign(dx) * a.w / 2, y: a.y }
         : { x: a.x, y: a.y + Math.sign(dy) * a.h / 2 };
     }
+    // Orthogonal elbow router: exits source on the dominant axis, pivots at midpoint,
+    // enters target from the correct side. Produces neat L/Z-shapes instead of long
+    // diagonal arcs that span across the whole diagram.
     function routePath(a, b) {
       const ac = center(a), bc = center(b);
-      const s = anchor(ac, bc), rawE = anchor(bc, ac);
-      const dx = rawE.x - s.x, dy = rawE.y - s.y;
+      const dx = bc.x - ac.x, dy = bc.y - ac.y;
       const horiz = Math.abs(dx) > Math.abs(dy);
-      
-      const gap = 8; // distance to keep from box edges
-      const e = { x: rawE.x, y: rawE.y };
-      const s2 = { x: s.x, y: s.y };
+      const gap = 8;
+
+      let sx, sy, ex, ey;
       if (horiz) {
-        e.x -= Math.sign(dx) * gap;
-        s2.x += Math.sign(dx) * gap;
+        sx = ac.x + Math.sign(dx) * (ac.w / 2 + gap);
+        sy = ac.y;
+        ex = bc.x - Math.sign(dx) * (bc.w / 2 + gap);
+        ey = bc.y;
       } else {
-        e.y -= Math.sign(dy) * gap;
-        s2.y += Math.sign(dy) * gap;
+        sx = ac.x;
+        sy = ac.y + Math.sign(dy) * (ac.h / 2 + gap);
+        ex = bc.x;
+        ey = bc.y - Math.sign(dy) * (bc.h / 2 + gap);
       }
-      
-      const cx = horiz ? (s2.x + e.x) / 2 : s2.x;
-      const cy = horiz ? s2.y : (s2.y + e.y) / 2;
-      return 'M ' + s2.x + ' ' + s2.y + ' Q ' + cx + ' ' + cy + ' ' + e.x + ' ' + e.y;
+
+      // Elbow waypoint: mid-x for horizontal-primary, mid-y for vertical-primary
+      // Use a small rounding radius (r) on the corner so it doesn't look angular
+      const r = 6;
+      if (horiz) {
+        const mx = (sx + ex) / 2;
+        // Z-shape: → pivot ↕ → 
+        if (Math.abs(sy - ey) < r * 2) {
+          // nearly same row: straight line
+          return 'M ' + sx + ' ' + sy + ' L ' + ex + ' ' + ey;
+        }
+        const d1y = Math.sign(ey - sy);
+        return 'M ' + sx + ' ' + sy +
+               ' L ' + (mx - r) + ' ' + sy +
+               ' Q ' + mx + ' ' + sy + ' ' + mx + ' ' + (sy + r * d1y) +
+               ' L ' + mx + ' ' + (ey - r * d1y) +
+               ' Q ' + mx + ' ' + ey + ' ' + (mx + r) + ' ' + ey +
+               ' L ' + ex + ' ' + ey;
+      } else {
+        const my = (sy + ey) / 2;
+        // Z-shape: ↓ pivot → ↓
+        if (Math.abs(sx - ex) < r * 2) {
+          return 'M ' + sx + ' ' + sy + ' L ' + ex + ' ' + ey;
+        }
+        const d1x = Math.sign(ex - sx);
+        return 'M ' + sx + ' ' + sy +
+               ' L ' + sx + ' ' + (my - r) +
+               ' Q ' + sx + ' ' + my + ' ' + (sx + r * d1x) + ' ' + my +
+               ' L ' + (ex - r * d1x) + ' ' + my +
+               ' Q ' + ex + ' ' + my + ' ' + ex + ' ' + (my + r) +
+               ' L ' + ex + ' ' + ey;
+      }
     }
     function drawEdges() {
       edgesGroup.innerHTML = '';
@@ -522,8 +586,16 @@ export function generateInteractiveHTML(
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'edge-group');
         
+        const d = routePath(a, b);
+
+        // Invisible wide hit-area path for easy clicking (14px wide)
+        const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        hitPath.setAttribute('d', d);
+        hitPath.setAttribute('class', 'edge-hit');
+        group.appendChild(hitPath);
+
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', routePath(a, b));
+        path.setAttribute('d', d);
         path.setAttribute('class', 'edge-path' + (e.dashed ? ' dashed' : ''));
         path.setAttribute('marker-end', 'url(#dfy-arrow)');
         group.appendChild(path);
@@ -556,8 +628,11 @@ export function generateInteractiveHTML(
           svg.classList.add('has-active');
           selectElement(group);
           
+          // Highlight the two connected nodes, dim the rest
+          const fromNode = cardMap[e.from];
+          const toNode = cardMap[e.to];
           document.querySelectorAll('.dfy-node').forEach(n => {
-            if (n === a.el || n === b.el) {
+            if (n === fromNode || n === toNode) {
               n.classList.remove('dimmed');
             } else {
               n.classList.add('dimmed');
@@ -578,6 +653,8 @@ export function generateInteractiveHTML(
       });
     }
     drawEdges();
+    // Fit after first paint so offsetWidth/Height are available
+    requestAnimationFrame(() => requestAnimationFrame(fitToContent));
     window.addEventListener('resize', drawEdges);
     
     // Auto-calculate subgraph boundaries and assign nodes to subgraphs
@@ -620,6 +697,14 @@ export function generateInteractiveHTML(
       el.addEventListener('pointerdown', e => {
         if (e.target.isContentEditable || e.target.closest('.dfy-label, .dfy-subgraph-label')) return;
         if (e.target.closest('button')) return;
+        // IMPORTANT: only start a subgraph drag if the pointer landed directly on the
+        // subgraph div itself or its label — NOT if it landed on a child node or the SVG
+        // edge layer (which sits on top of the subgraph div and would otherwise hijack clicks).
+        if (el.classList.contains('dfy-subgraph')) {
+          const directTarget = e.target;
+          const isOnSubgraph = directTarget === el || directTarget.closest('.dfy-subgraph-label');
+          if (!isOnSubgraph) return; // let the event pass through to nodes or edges
+        }
         e.preventDefault();
         dragging = el;
         selectElement(el);
@@ -668,6 +753,9 @@ export function generateInteractiveHTML(
           el.releasePointerCapture(e.pointerId); 
           dragging = null; 
           if (pz) pz.setOptions({ disablePan: false });
+          // Apply snap-to-grid on drag end for all nodes (not just pasted clones)
+          if (el.classList.contains('dfy-node')) applySnap(el);
+          drawEdges();
         }
       });
     });
@@ -679,7 +767,124 @@ export function generateInteractiveHTML(
       if (el) el.classList.add('selected');
     }
 
-    // Edit mode — declare BEFORE the keydown that references editMode
+    // ─── Undo / Redo ─────────────────────────────────────────────────────────
+    const undoStack = [];
+    const redoStack = [];
+    const UNDO_MAX = 50;
+
+    // Snapshot captures full DOM state: positions AND presence of every node
+    function captureSnapshot() {
+      const state = [];
+      canvas.querySelectorAll('.dfy-node').forEach(n => {
+        state.push({
+          id: n.dataset.nodeId || n.dataset.id || '',
+          cx: parseFloat(n.dataset.cx),
+          cy: parseFloat(n.dataset.cy),
+          outerHTML: n.outerHTML,
+        });
+      });
+      return state;
+    }
+
+    function pushUndo() {
+      undoStack.push(captureSnapshot());
+      if (undoStack.length > UNDO_MAX) undoStack.shift();
+      redoStack.length = 0;
+    }
+
+    function applySnapshot(state) {
+      // Remove nodes that weren't in the snapshot
+      const snapshotIds = new Set(state.map(e => e.id));
+      canvas.querySelectorAll('.dfy-node').forEach(n => {
+        const id = n.dataset.nodeId || n.dataset.id || '';
+        if (!snapshotIds.has(id)) n.remove();
+      });
+      // Update existing / restore removed nodes
+      state.forEach(entry => {
+        let node = canvas.querySelector(\`.dfy-node[data-node-id="\${entry.id}"], .dfy-node[data-id="\${entry.id}"]\`);
+        if (!node) {
+          // Node was deleted — restore it from saved HTML
+          const tmp = document.createElement('div');
+          tmp.innerHTML = entry.outerHTML;
+          node = tmp.firstElementChild;
+          canvas.appendChild(node);
+          // Re-attach drag listeners for restored nodes
+          attachDragListeners(node);
+        }
+        node.dataset.cx = entry.cx;
+        node.dataset.cy = entry.cy;
+        node.style.left = entry.cx + 'px';
+        node.style.top = entry.cy + 'px';
+      });
+      drawEdges();
+    }
+
+    // Helper: attach all drag + undo listeners to a node element (used for initial nodes and restored nodes)
+    function attachDragListeners(el) {
+      el.addEventListener('pointerdown', () => pushUndo(), { capture: true });
+      el.addEventListener('pointerdown', e => {
+        if (e.target.isContentEditable || e.target.closest('.dfy-label, .dfy-subgraph-label')) return;
+        if (e.target.closest('button')) return;
+        e.preventDefault(); dragging = el; selectElement(el);
+        el.classList.add('dragging'); lastPtr = { x: e.clientX, y: e.clientY };
+        el.setPointerCapture(e.pointerId); if (pz) pz.setOptions({ disablePan: true });
+      });
+      el.addEventListener('pointermove', e => {
+        if (dragging !== el) return;
+        const scale = pz ? pz.getScale() : 1;
+        const dx = (e.clientX - lastPtr.x) / scale, dy = (e.clientY - lastPtr.y) / scale;
+        lastPtr = { x: e.clientX, y: e.clientY };
+        const newCx = parseFloat(el.dataset.cx) + dx;
+        const newCy = parseFloat(el.dataset.cy) + dy;
+        el.dataset.cx = newCx; el.dataset.cy = newCy;
+        el.style.left = newCx + 'px'; el.style.top = newCy + 'px';
+        drawEdges();
+      });
+      el.addEventListener('pointerup', e => {
+        if (dragging === el) {
+          el.classList.remove('dragging'); el.releasePointerCapture(e.pointerId); dragging = null;
+          if (pz) pz.setOptions({ disablePan: false });
+          applySnap(el); drawEdges();
+        }
+      });
+    }
+
+    // Capture before each drag
+    document.querySelectorAll('.dfy-node, .dfy-subgraph').forEach(el => {
+      el.addEventListener('pointerdown', () => pushUndo(), { capture: true });
+    });
+
+    // ─── Snap to grid ─────────────────────────────────────────────────────────
+    let snapEnabled = false;
+    const GRID_SIZE = 20;
+    function snapToGrid(v) { return Math.round(v / GRID_SIZE) * GRID_SIZE; }
+    function applySnap(el) {
+      if (!snapEnabled || !el.classList.contains('dfy-node')) return;
+      const cx = snapToGrid(parseFloat(el.dataset.cx));
+      const cy = snapToGrid(parseFloat(el.dataset.cy));
+      el.dataset.cx = cx; el.dataset.cy = cy;
+      el.style.left = cx + 'px'; el.style.top = cy + 'px';
+    }
+
+    // ─── Copy / Paste ─────────────────────────────────────────────────────────
+    let clipboard = null;
+
+    // ─── Auto-layout reset ────────────────────────────────────────────────────
+    const defaultPositions = [];
+    document.querySelectorAll('.dfy-node').forEach(n => {
+      defaultPositions.push({ el: n, cx: parseFloat(n.dataset.cx), cy: parseFloat(n.dataset.cy) });
+    });
+    function resetLayout() {
+      pushUndo();
+      defaultPositions.forEach(({ el, cx, cy }) => {
+        if (!el.isConnected) return;
+        el.dataset.cx = cx; el.dataset.cy = cy;
+        el.style.left = cx + 'px'; el.style.top = cy + 'px';
+      });
+      drawEdges();
+    }
+
+    // ─── Edit mode — declare BEFORE the keydown that references editMode ──────
     const editBtn = document.getElementById('edit-btn');
     const editPill = document.getElementById('edit-pill');
     let editMode = false;
@@ -690,16 +895,115 @@ export function generateInteractiveHTML(
       if (editBtn) { editBtn.classList.toggle('primary', on); }
     }
     if (editBtn) editBtn.addEventListener('click', () => setEdit(!editMode));
-    
+
     document.addEventListener('keydown', e => {
-      if ((e.key === 'Backspace' || e.key === 'Delete') && selectedEl && !editMode) {
+      const tag = document.activeElement?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
+
+      // Delete selected element
+      if ((e.key === 'Backspace' || e.key === 'Delete') && selectedEl && !editMode && !typing) {
         if (selectedEl.classList.contains('dfy-node') || selectedEl.classList.contains('dfy-subgraph') || selectedEl.classList.contains('edge-group')) {
+          pushUndo();
           selectedEl.remove();
           selectedEl = null;
           drawEdges();
         }
+        return;
+      }
+
+      if (typing) return;
+
+      // Undo: Ctrl+Z
+      if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        e.preventDefault();
+        if (undoStack.length > 0) {
+          redoStack.push(captureSnapshot());
+          applySnapshot(undoStack.pop());
+        }
+        return;
+      }
+
+      // Redo: Ctrl+Shift+Z or Ctrl+Y
+      if ((e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) || (e.key === 'y' && (e.ctrlKey || e.metaKey))) {
+        e.preventDefault();
+        if (redoStack.length > 0) {
+          undoStack.push(captureSnapshot());
+          applySnapshot(redoStack.pop());
+        }
+        return;
+      }
+
+      // Copy: Ctrl+C — copies selected node position + label
+      if (e.key === 'c' && (e.ctrlKey || e.metaKey) && selectedEl?.classList.contains('dfy-node')) {
+        e.preventDefault();
+        clipboard = {
+          cx: parseFloat(selectedEl.dataset.cx),
+          cy: parseFloat(selectedEl.dataset.cy),
+          html: selectedEl.outerHTML,
+        };
+        return;
+      }
+
+      // Paste: Ctrl+V — clones the copied node with an offset
+      if (e.key === 'v' && (e.ctrlKey || e.metaKey) && clipboard) {
+        e.preventDefault();
+        pushUndo();
+        const tmp = document.createElement('div');
+        tmp.innerHTML = clipboard.html;
+        const clone = tmp.firstElementChild;
+        if (clone) {
+          const newCx = clipboard.cx + 30;
+          const newCy = clipboard.cy + 30;
+          clone.dataset.cx = newCx;
+          clone.dataset.cy = newCy;
+          clone.style.left = newCx + 'px';
+          clone.style.top = newCy + 'px';
+          clone.removeAttribute('id');
+          clone.dataset.nodeId = 'copy_' + Date.now();
+          canvas.appendChild(clone);
+          selectElement(clone);
+          // Re-attach drag listeners
+          clone.addEventListener('pointerdown', e2 => {
+            if (e2.target.isContentEditable || e2.target.closest('.dfy-label, .dfy-subgraph-label')) return;
+            if (e2.target.closest('button')) return;
+            e2.preventDefault(); dragging = clone; selectElement(clone);
+            clone.classList.add('dragging'); lastPtr = { x: e2.clientX, y: e2.clientY };
+            clone.setPointerCapture(e2.pointerId); if (pz) pz.setOptions({ disablePan: true });
+          });
+          clone.addEventListener('pointermove', e2 => {
+            if (dragging !== clone) return;
+            const scale = pz ? pz.getScale() : 1;
+            const dx = (e2.clientX - lastPtr.x) / scale, dy = (e2.clientY - lastPtr.y) / scale;
+            lastPtr = { x: e2.clientX, y: e2.clientY };
+            const nx = parseFloat(clone.dataset.cx) + dx, ny = parseFloat(clone.dataset.cy) + dy;
+            clone.dataset.cx = nx; clone.dataset.cy = ny;
+            clone.style.left = nx + 'px'; clone.style.top = ny + 'px';
+            drawEdges();
+          });
+          clone.addEventListener('pointerup', e2 => {
+            if (dragging === clone) { clone.classList.remove('dragging'); clone.releasePointerCapture(e2.pointerId); dragging = null; if (pz) pz.setOptions({ disablePan: false }); applySnap(clone); drawEdges(); }
+          });
+          drawEdges();
+        }
+        return;
+      }
+
+      // Snap-to-grid toggle: G
+      if (e.key === 'g' || e.key === 'G') {
+        snapEnabled = !snapEnabled;
+        const pill = document.getElementById('snap-pill');
+        if (pill) { pill.style.display = snapEnabled ? 'inline-block' : 'none'; }
+        return;
+      }
+
+      // Auto-layout reset: Alt+R
+      if (e.key === 'r' && e.altKey) {
+        e.preventDefault();
+        resetLayout();
+        return;
       }
     });
+
     function bindEditable(sel) {
       document.querySelectorAll(sel).forEach(el => {
         el.addEventListener('click', e => {
@@ -797,6 +1101,9 @@ export function generateInteractiveHTML(
       if (pz) { pz.reset(); pz.pan(0, 0); }
       themeIdx = 0; setTheme(themes[0]); setEdit(false); drawEdges();
     });
+    // Auto-layout button
+    const layoutBtn = document.getElementById('layout-btn');
+    if (layoutBtn) layoutBtn.addEventListener('click', () => resetLayout());
     // Export
     function download(name, data, mime) {
       const blob = data instanceof Blob ? data : new Blob([data], { type: mime });
@@ -957,52 +1264,104 @@ export function generateInteractiveHTML(
       });
     }
 
-    // Minimap
+    // Minimap — uses live card positions (cx/cy) so it reflects drags in real time.
+    // Canvas 2D API does not support CSS variables, so we resolve colors from computed styles.
     const minimapCanvas = document.getElementById('dfy-minimap-canvas');
     const minimapViewport = document.getElementById('dfy-minimap-viewport');
     if (minimapCanvas && minimapViewport) {
       const ctx = minimapCanvas.getContext('2d');
       function renderMinimap() {
-        const w = minimapCanvas.width, h = minimapCanvas.height;
-        ctx.fillStyle = 'var(--surface)';
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = '#ccc';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(0, 0, w, h);
-        if (NODES.length === 0) return;
-        const minX = Math.min(...NODES.map(n => n.x));
-        const maxX = Math.max(...NODES.map(n => n.x + n.w));
-        const minY = Math.min(...NODES.map(n => n.y));
-        const maxY = Math.max(...NODES.map(n => n.y + n.h));
+        const mw = minimapCanvas.width, mh = minimapCanvas.height;
+        // Resolve theme colors from computed style (avoids CSS variable resolution failure in canvas)
+        const cs = getComputedStyle(document.documentElement);
+        const surfaceColor = cs.getPropertyValue('--surface').trim() || '#ffffff';
+        const accentColor = cs.getPropertyValue('--edge-color-active').trim() || '#3b82f6';
+        const edgeColor = cs.getPropertyValue('--edge-color').trim() || '#94a3b8';
+        ctx.clearRect(0, 0, mw, mh);
+        ctx.fillStyle = surfaceColor;
+        ctx.fillRect(0, 0, mw, mh);
+        // Collect live positions from DOM cards
+        const liveNodes = Array.from(canvas.querySelectorAll('.dfy-node')).map(card => ({
+          cx: parseFloat(card.dataset.cx),
+          cy: parseFloat(card.dataset.cy),
+          w: card.offsetWidth,
+          h: card.offsetHeight,
+        })).filter(n => !isNaN(n.cx));
+        if (!liveNodes.length) return;
+        const minX = Math.min(...liveNodes.map(n => n.cx - n.w / 2));
+        const maxX = Math.max(...liveNodes.map(n => n.cx + n.w / 2));
+        const minY = Math.min(...liveNodes.map(n => n.cy - n.h / 2));
+        const maxY = Math.max(...liveNodes.map(n => n.cy + n.h / 2));
         const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
-        const scaleX = (w - 4) / rangeX, scaleY = (h - 4) / rangeY;
-        ctx.fillStyle = '#3b82f6';
-        NODES.forEach(n => {
-          const nx = ((n.x - minX) * scaleX) + 2;
-          const ny = ((n.y - minY) * scaleY) + 2;
-          ctx.fillRect(nx, ny, Math.max(2, scaleX * 20), Math.max(2, scaleY * 20));
+        const scaleX = (mw - 8) / rangeX, scaleY = (mh - 8) / rangeY;
+        // Draw edges as thin lines
+        ctx.strokeStyle = edgeColor;
+        ctx.lineWidth = 0.5;
+        EDGES.forEach(e => {
+          const a = liveNodes.find((_, i) => canvas.querySelectorAll('.dfy-node')[i]?.dataset.id === e.from);
+          const b = liveNodes.find((_, i) => canvas.querySelectorAll('.dfy-node')[i]?.dataset.id === e.to);
+          if (!a || !b) return;
+          ctx.beginPath();
+          ctx.moveTo(((a.cx - minX) * scaleX) + 4, ((a.cy - minY) * scaleY) + 4);
+          ctx.lineTo(((b.cx - minX) * scaleX) + 4, ((b.cy - minY) * scaleY) + 4);
+          ctx.stroke();
         });
-        const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
-        const vx = ((0 - minX) * scaleX) + 2;
-        const vy = ((0 - minY) * scaleY) + 2;
-        const vw = (cw / (VIEWBOX.w || 1)) * (w - 4);
-        const vh = (ch / (VIEWBOX.h || 1)) * (h - 4);
-        minimapViewport.style.left = vx + 'px';
-        minimapViewport.style.top = vy + 'px';
-        minimapViewport.style.width = vw + 'px';
-        minimapViewport.style.height = vh + 'px';
+        // Draw node dots
+        liveNodes.forEach(n => {
+          const nx = ((n.cx - minX) * scaleX) + 4;
+          const ny = ((n.cy - minY) * scaleY) + 4;
+          const nw = Math.max(3, n.w * scaleX * 0.6);
+          const nh = Math.max(2, n.h * scaleY * 0.6);
+          ctx.fillStyle = accentColor;
+          ctx.fillRect(nx - nw / 2, ny - nh / 2, nw, nh);
+        });
+        // Draw viewport indicator
+        const pzPan = pz ? pz.getPan() : { x: 0, y: 0 };
+        const pzScale = pz ? pz.getScale() : 1;
+        const vpW = canvasWrap.clientWidth, vpH = canvasWrap.clientHeight;
+        const vpCanvasX = (-pzPan.x / pzScale);
+        const vpCanvasY = (-pzPan.y / pzScale);
+        const vpCanvasW = vpW / pzScale;
+        const vpCanvasH = vpH / pzScale;
+        const vx = ((vpCanvasX - minX) * scaleX) + 4;
+        const vy = ((vpCanvasY - minY) * scaleY) + 4;
+        const vw = Math.max(4, vpCanvasW * scaleX);
+        const vh = Math.max(4, vpCanvasH * scaleY);
+        minimapViewport.style.left = Math.max(0, vx) + 'px';
+        minimapViewport.style.top = Math.max(0, vy) + 'px';
+        minimapViewport.style.width = Math.min(mw - Math.max(0, vx), vw) + 'px';
+        minimapViewport.style.height = Math.min(mh - Math.max(0, vy), vh) + 'px';
       }
-      renderMinimap();
+      // Re-render minimap whenever edges are redrawn (drag, resize, etc.)
+      const _origDrawEdges = drawEdges;
+      drawEdges = function() { _origDrawEdges(); renderMinimap(); };
+      // Also on panzoom events
+      canvas.addEventListener('panzoomchange', renderMinimap);
+      requestAnimationFrame(() => requestAnimationFrame(renderMinimap));
       minimapCanvas.addEventListener('click', (e) => {
         const rect = minimapCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left, y = e.clientY - rect.top;
-        if (pz) {
-          const panX = (x / minimapCanvas.width) * VIEWBOX.w - canvas.offsetWidth / 2;
-          const panY = (y / minimapCanvas.height) * VIEWBOX.h - canvas.offsetHeight / 2;
-          pz.pan(-panX, -panY);
-        }
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        // Convert minimap click to canvas space, then pan panzoom there
+        const liveNds = Array.from(canvas.querySelectorAll('.dfy-node')).map(c => ({
+          cx: parseFloat(c.dataset.cx), cy: parseFloat(c.dataset.cy),
+          w: c.offsetWidth, h: c.offsetHeight,
+        })).filter(n => !isNaN(n.cx));
+        if (!liveNds.length || !pz) return;
+        const mnX = Math.min(...liveNds.map(n => n.cx - n.w/2));
+        const mxX = Math.max(...liveNds.map(n => n.cx + n.w/2));
+        const mnY = Math.min(...liveNds.map(n => n.cy - n.h/2));
+        const mxY = Math.max(...liveNds.map(n => n.cy + n.h/2));
+        const rX = mxX - mnX || 1, rY = mxY - mnY || 1;
+        const targetCx = mnX + (mx / minimapCanvas.width) * rX;
+        const targetCy = mnY + (my / minimapCanvas.height) * rY;
+        const scale = pz.getScale();
+        pz.pan(
+          canvasWrap.clientWidth / 2 - targetCx * scale,
+          canvasWrap.clientHeight / 2 - targetCy * scale,
+          { animate: true }
+        );
+        renderMinimap();
       });
-      document.addEventListener('dfy-node-moved', renderMinimap);
     }
 
     // Fullscreen

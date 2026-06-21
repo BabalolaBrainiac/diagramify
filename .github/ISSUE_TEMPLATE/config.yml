@@ -3,3 +3,6 @@ contact_links:
   - name: Security vulnerability
     url: https://github.com/BabalolaBrainiac/diagramify/security/advisories/new
     about: Report security issues privately
+  - name: Q&A / General help
+    url: https://github.com/BabalolaBrainiac/diagramify/discussions
+    about: Ask questions, share diagrams, or discuss ideas in GitHub Discussions

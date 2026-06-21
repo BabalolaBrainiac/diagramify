@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+
+### Added
+- Regression coverage for .NET codebase analysis and nonblank PNG raster output
+- `diagramify dev` alias command for the interactive dev server workflow
+- `--open` flag for `diagramify watch` to auto-launch the browser
+- GitHub Issue templates for bug tracking and quality misses
+
+### Changed
+- Improved .NET/C# analysis for `Program.cs`, `.csproj` dependencies, module directories, minimal API endpoints, Docker Compose services, and project-reference links
+- `diagramify render` now validates requested output formats and can write `.mmd` output explicitly
+- `diagramify preview` (and `dev`) now support full WebSocket hot-reload for `.mmd` file watching
+- `SECURITY.md` now tracks known transitive AI SDK vulnerabilities with workaround guidance
+
+### Fixed
+- PNG/JPEG raster exports no longer render as all-black images when SVG theme styles use CSS variables
+- Unsupported CLI output formats now fail loudly instead of exiting successfully without writing files
+- HTML Viewer: Initial diagram load now scales and pans to perfectly fit-to-content
+- HTML Viewer: Minimap now renders live nodes via canvas instead of relying on broken SVG clones
+- HTML Viewer: Undo/Redo now captures full DOM state, properly reverting structural changes
+- HTML Viewer: Grid snap now applies correctly on normal drag `pointerup`
+- HTML Viewer: Layer toggles now work via injected `data-subgraph` attributes
+
 ## [0.2.1] — 2026-06-11
 
 ### Added

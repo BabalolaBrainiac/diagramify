@@ -4,11 +4,29 @@ import { join, resolve } from 'path';
 import { renderDiagram } from '../../core/render.js';
 import type { OutputFormat, RenderOptions } from '../../core/types.js';
 
+const VALID_OUTPUT_FORMATS = new Set<OutputFormat>(['svg', 'png', 'jpeg', 'html', 'mmd']);
+
+function parseOutputFormats(value: string | undefined, defaults: OutputFormat[]): OutputFormat[] {
+  const formats = value
+    ? value.split(',').map((f: string) => f.trim().toLowerCase()).filter(Boolean)
+    : defaults;
+
+  const invalid = formats.filter((format) => !VALID_OUTPUT_FORMATS.has(format as OutputFormat));
+  if (invalid.length > 0) {
+    throw new Error(
+      `Unsupported output format${invalid.length === 1 ? '' : 's'}: ${invalid.join(', ')}. ` +
+      `Supported formats: ${Array.from(VALID_OUTPUT_FORMATS).join(', ')}`,
+    );
+  }
+
+  return formats as OutputFormat[];
+}
+
 export const renderCommand = new Command()
   .name('render')
-  .description('Render an existing .mmd file to SVG, PNG, or JPEG')
+  .description('Render an existing .mmd file to SVG, PNG, JPEG, HTML, or Mermaid source')
   .argument('<input>', 'Path to .mmd file or "-" for stdin')
-  .option('--out <formats>', 'Output formats: svg,png,jpeg,html (default: svg,html)')
+  .option('--out <formats>', 'Output formats: svg,png,jpeg,html,mmd (default: svg,html)')
   .option('--outdir <dir>', 'Output directory (default: current directory)')
   .option('--name <name>', 'Output filename (default: diagram)')
   .option('--theme <theme>', 'Diagram theme name')
@@ -34,9 +52,7 @@ export const renderCommand = new Command()
         mermaidSource = readFileSync(filePath, 'utf-8');
       }
 
-      const formats = options.out
-        ? options.out.split(',').map((f: string) => f.trim().toLowerCase())
-        : ['svg', 'html'];
+      const formats = parseOutputFormats(options.out, ['svg', 'html']);
 
       const renderOptions: RenderOptions = {
         theme: options.theme,
@@ -46,7 +62,7 @@ export const renderCommand = new Command()
       };
 
       console.error('Rendering diagram...');
-      const result = await renderDiagram(mermaidSource, formats as OutputFormat[], renderOptions);
+      const result = await renderDiagram(mermaidSource, formats, renderOptions);
 
       if (options.stdout) {
         if (result.svg) {
@@ -81,6 +97,12 @@ export const renderCommand = new Command()
           writeFileSync(htmlPath, result.html);
           console.error(`Generated: ${htmlPath}`);
           console.error(`Open in browser: file://${htmlPath}`);
+        }
+
+        if (formats.includes('mmd')) {
+          const mmdPath = join(outDir, `${baseName}.mmd`);
+          writeFileSync(mmdPath, result.mermaid);
+          console.error(`Generated: ${mmdPath}`);
         }
       }
     } catch (error) {
