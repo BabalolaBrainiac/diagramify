@@ -37,7 +37,20 @@
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npm run check",
+    "release": "np",
+    "release:patch": "np patch",
+    "release:minor": "np minor",
+    "release:major": "np major"
+  },
+  "np": {
+    "yarn": false,
+    "contents": ".",
+    "testScript": "check",
+    "anyBranch": false,
+    "branch": "main",
+    "preview": false,
+    "message": "chore: release v%s"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
@@ -61,6 +74,7 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.56.0",
+    "np": "^11.2.1",
     "simple-icons": "^16.20.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
