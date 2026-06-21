@@ -14,7 +14,9 @@ Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three
 
 - **Codebase analysis** — automatically map your project's structure, frameworks, services, and inter-module dependencies
 - **Natural language input** — describe your system; the LLM produces valid Mermaid syntax
-- **Interactive HTML output** — drag nodes, pan, zoom, edit labels, highlight edges, search, export
+- **Interactive HTML output** — drag nodes, pan/zoom, edit labels, click edges to highlight connections, search, theme switcher, minimap, undo/redo, snap-to-grid, export
+- **Fit-to-content on load** — large diagrams auto-scale to fill the viewport on open
+- **Orthogonal edge routing** — edges draw as clean L/Z-shaped paths with rounded corners, not long diagonal arcs
 - **Multiple output formats** — `html`, `svg`, `png`, `jpeg`, `mmd`
 - **Diagram diffing** — `diagramify diff` compares two `.mmd` files and highlights changes
 - **CI integration** — `diagramify ci` generates GitHub Actions / GitLab CI workflows
@@ -137,7 +139,12 @@ diagramify generate --description "User logs in → auth validates → JWT retur
 
 # Use OpenAI GPT-4o
 diagramify generate --provider openai --model gpt-4o
+
+# Use Google Gemini (recommended for large codebases)
+diagramify generate --provider google --model gemini-flash-latest --out html,svg,png,mmd
 ```
+
+> **Tip — Gemini on large codebases:** If output is truncated, ensure you are using a non-thinking model variant (e.g. `gemini-flash-latest` rather than `gemini-2.5-flash`). Diagramify automatically sets `thinkingBudget: 0` and `maxTokens: 8192` for Google models to maximise output token budget for Mermaid syntax.
 
 ---
 
@@ -191,7 +198,22 @@ diagramify dev --file diagram.mmd --open
 
 POST Mermaid source to `/api/update` to update the diagram programmatically. Hot-reload is broadcast to all open browser tabs.
 
-Keyboard shortcuts: `T` theme · `E` edit · `L` legend · `H` hide edges · `R` reset · `/` search · `Del` delete node
+Keyboard shortcuts in the interactive HTML viewer:
+
+| Key | Action |
+|-----|--------|
+| `T` | Cycle themes (light → dark → Tokyo Night → Nord → Catppuccin) |
+| `E` | Toggle edit mode (click any label to rename) |
+| `L` | Toggle legend / sidebar |
+| `H` | Toggle edge visibility |
+| `R` | Reset zoom and pan |
+| `G` | Toggle snap-to-grid |
+| `F` | Fullscreen |
+| `/` | Focus node search |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
+| `Ctrl+C` / `Ctrl+V` | Copy / paste node |
+| `Del` / `Backspace` | Delete selected node or edge |
 
 ---
 
@@ -202,6 +224,13 @@ Lightweight `.mmd` file watcher — HTTP server + WebSocket hot-reload only. No 
 ```
 diagramify watch <file> [--port <n>] [--theme <t>] [--open] [--outdir <dir>]
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port <n>` | `3001` | HTTP port |
+| `--theme <t>` | `light` | Diagram theme |
+| `--open` | — | Open browser automatically |
+| `--outdir <dir>` | — | Also write output files on each change |
 
 ```bash
 diagramify watch diagram.mmd --open --theme dark
@@ -265,7 +294,7 @@ export GOOGLE_GENERATIVE_AI_API_KEY=...
 
 # Defaults (optional)
 export DIAGRAMIFY_PROVIDER=google
-export DIAGRAMIFY_MODEL=gemini-2.5-flash
+export DIAGRAMIFY_MODEL=gemini-flash-latest
 export DIAGRAMIFY_THEME=dark
 ```
 
@@ -276,7 +305,7 @@ import type { DiagramifyConfig } from 'diagramify-ai';
 
 export default {
   provider: 'google',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-flash-latest',
   theme: 'tokyo-night',
   defaultOutput: ['html', 'svg'],
   temperature: 0.7,
@@ -301,11 +330,11 @@ const result = await generateDiagram({
   config: { provider: 'anthropic' },
 });
 
-result.mermaid  // string — Mermaid source
-result.svg      // string | undefined
-result.html     // string | undefined — full interactive HTML
-result.png      // Buffer | undefined
-result.jpeg     // Buffer | undefined
+result.mermaid     // string — Mermaid source
+result.svg         // string | undefined
+result.html        // string | undefined — full interactive HTML
+result.png         // Buffer | undefined
+result.jpeg        // Buffer | undefined
 result.tokensUsed  // number | undefined
 ```
 
@@ -370,7 +399,9 @@ export default function MyPage() {
 |----------|---------|---------------|
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
-| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-flash-latest` |
+
+> **Google Gemini note:** Use `gemini-flash-latest` or `gemini-2.0-flash` for codebase generation. The older `gemini-1.5-*` model IDs are no longer available on the v1beta API. Diagramify disables thinking budget on all Google models to ensure the full token budget goes toward Mermaid output.
 
 ---
 
@@ -395,7 +426,6 @@ diagramify/
 ├── skills/
 │   └── diagramify/
 │       └── SKILL.md       # Claude Code skill
-└── examples/              # Sample .mmd files
 ```
 
 ---
@@ -403,12 +433,20 @@ diagramify/
 ## How it works
 
 1. **Analyze** — scan codebase structure (files, imports, frameworks, entry points) — or accept a text description
-2. **Prompt** — build a structured LLM prompt with context and diagram rules
+2. **Prompt** — build a structured LLM prompt with context and diagram rules (intra-module wiring, no floating nodes)
 3. **Generate** — call Claude / OpenAI / Gemini to produce valid Mermaid syntax
 4. **Validate** — parse and verify output; retry up to 3× on failure
 5. **Render** — convert to SVG using `beautiful-mermaid` (pure TypeScript, no DOM)
-6. **Overlay** — optionally wrap SVG in interactive HTML with icons, drag-and-drop, themes
+6. **Overlay** — optionally wrap SVG in interactive HTML with icons, drag-and-drop, themes, orthogonal edge routing
 7. **Rasterize** — optionally convert SVG to PNG / JPEG via `sharp`
+
+---
+
+## Security
+
+Diagramify uses the Vercel AI SDK for LLM calls. There are known transitive vulnerabilities in `@ai-sdk/provider-utils` (Uncontrolled Resource Consumption) and `jsondiffpatch` (XSS via HTML formatter). These are **not exploitable** via the CLI or library API surface — no untrusted JSON is passed to jsondiffpatch and the provider-utils vulnerability requires an attacker-controlled server response in a streaming context the CLI does not use.
+
+Run `npm run audit:prod` to check current production vulnerability status. See [SECURITY.md](./SECURITY.md) for the full vulnerability register and workaround guidance.
 
 ---
 
@@ -424,6 +462,8 @@ You can use, modify, distribute, and contribute to it. See
 Issues and pull requests are welcome at
 [github.com/BabalolaBrainiac/diagramify](https://github.com/BabalolaBrainiac/diagramify).
 Run `npm run check` before submitting a change.
+
+When filing a bug, use the GitHub Issue templates — they include structured fields for reproducing diagram quality issues, missing icons, analyzer misses, and rendering bugs.
 
 ## Acknowledgments
 
