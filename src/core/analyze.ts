@@ -263,7 +263,7 @@ export async function detectWorkspaces(rootPath: string): Promise<string[]> {
 export async function traceImportGraph(rootPath: string, files: string[]): Promise<Array<{from: string; to: string}>> {
   const links: Array<{from: string; to: string}> = [];
   const importRe = /(?:import|require)\s*(?:\(?\s*)?['"](\.[^'"]+)['"]/g;
-  for (const file of files.slice(0, 40)) {
+  for (const file of files.slice(0, 500)) {
     const rel = relative(rootPath, file);
     const dir = dirname(file);
     try {
@@ -342,7 +342,7 @@ async function detectAPIEndpoints(rootPath: string, files: string[]): Promise<De
   const endpoints: DetectedEndpoint[] = [];
   
   for (const file of files) {
-    if (endpoints.length >= 20) break;
+    if (endpoints.length >= 100) break;
     try {
       const content = readFileSync(file, 'utf-8');
       
@@ -350,7 +350,7 @@ async function detectAPIEndpoints(rootPath: string, files: string[]): Promise<De
       for (const pattern of ENDPOINT_PATTERNS) {
         pattern.lastIndex = 0;
         while ((match = pattern.exec(content)) !== null) {
-          if (endpoints.length >= 20) break;
+          if (endpoints.length >= 100) break;
           const method = Array.from(match)
             .slice(1)
             .find((group) => typeof group === 'string' && /^(get|post|put|patch|delete|all)$/i.test(group))
@@ -565,7 +565,7 @@ async function walkFiles(root: string, maxFiles: number): Promise<string[]> {
   return scored.map((s) => s.path);
 }
 
-async function buildFileTree(files: string[], root: string, maxLines: number = 60): Promise<string> {
+async function buildFileTree(files: string[], root: string, maxLines: number = 1000): Promise<string> {
   const tree: Map<string, Set<string>> = new Map();
 
   for (const file of files) {
@@ -609,7 +609,7 @@ async function buildFileTree(files: string[], root: string, maxLines: number = 6
   return output;
 }
 
-async function readTopFiles(files: string[], budgetChars: number = 8000): Promise<string> {
+async function readTopFiles(files: string[], budgetChars: number = 40000): Promise<string> {
   let collected = '';
 
   for (const file of files) {
@@ -711,7 +711,7 @@ function estimateDiagramType(summary: string): DiagramType {
   return 'auto';
 }
 
-export async function analyzeCodebase(rootPath: string, maxFiles: number = 60): Promise<AnalysisResult> {
+export async function analyzeCodebase(rootPath: string, maxFiles: number = 1000): Promise<AnalysisResult> {
   const files = await walkFiles(rootPath, maxFiles);
   const fileTree = await buildFileTree(files, rootPath);
   const snippets = await readTopFiles(files);

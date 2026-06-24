@@ -123,7 +123,7 @@ function renderNodeCard(node: LayoutNode): string {
   const iconURL = getIconURL(info.slug || node.label.toLowerCase(), info.color);
   const fallback = getFallbackSVG(node.label, info.color).replace(/\n\s*/g, ' ');
   const iconHTML = iconURL
-    ? `<img src="${iconURL}" alt="" data-fallback="${escapeHTML(fallback)}" onerror="this.outerHTML=this.dataset.fallback">`
+    ? `<img src="${iconURL}" alt="" data-fallback="${escapeHTML(fallback)}">`
     : fallback;
 
   const cx = node.x + node.width / 2;
@@ -506,6 +506,13 @@ export function generateInteractiveHTML(
       card.style.top = cy + 'px';
       cardMap[id] = card;
     });
+
+    document.querySelectorAll('.dfy-node img').forEach(img => {
+      img.addEventListener('error', function() {
+        this.outerHTML = this.dataset.fallback || '';
+      });
+    });
+    
     function center(card) {
       const cx = parseFloat(card.dataset.cx);
       const cy = parseFloat(card.dataset.cy);
