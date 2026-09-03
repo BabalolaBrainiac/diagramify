@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 import { generateInteractiveHTML } from './html.js';
 import { styleSVG } from './styling/renderer.js';
+import { flattenSVGColors } from './styling/flatten.js';
 import { getTheme } from './styling/themes.js';
 import type { DiagramifyResult, OutputFormat, RenderOptions, DiagramType } from './types.js';
 
@@ -26,6 +27,53 @@ function applyThemeVars(svg: string, themeName?: string, darkMode?: boolean): st
     /<svg([^>]*?)>/,
     `<svg$1 style="--bg:${p.bg};--fg:${p.fg};--line:${p.line};--accent:${p.accent};background:${p.bg}">`,
   );
+}
+
+/**
+ * Gives the background color for a theme. A rasterizer ignores the CSS
+ * `background` property on the SVG root, so the color must become a real shape.
+ */
+export function resolveBackground(
+  themeName?: string,
+  darkMode?: boolean,
+  override?: string,
+): string {
+  if (override) {
+    return override;
+  }
+  const key = themeName && themePalette[themeName] ? themeName : darkMode ? 'dark' : 'light';
+  return themePalette[key].bg;
+}
+
+/**
+ * Puts an opaque background rectangle as the first painted shape in the SVG.
+ * Use the literal value `transparent` to keep the alpha channel.
+ */
+export function injectBackgroundRect(svg: string, color: string): string {
+  if (!color || color === 'transparent' || color === 'none') {
+    return svg;
+  }
+  if (svg.includes('data-diagramify-bg')) {
+    return svg;
+  }
+
+  const openTag = svg.match(/<svg[^>]*>/);
+  if (!openTag) {
+    return svg;
+  }
+
+  // Cover the full user space. A viewBox can start away from the origin.
+  const viewBox = openTag[0].match(/viewBox="([-\d.eE+\s]+)"/);
+  let rect = `<rect data-diagramify-bg="1" x="0" y="0" width="100%" height="100%" fill="${color}"/>`;
+  if (viewBox) {
+    const parts = viewBox[1].trim().split(/\s+/).map(Number);
+    if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
+      const [x, y, w, h] = parts;
+      rect = `<rect data-diagramify-bg="1" x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}"/>`;
+    }
+  }
+
+  return svg.replace(openTag[0], `${openTag[0]}${rect}`);
 }
 
 function detectDiagramType(mermaidSource: string): DiagramType {
@@ -57,7 +105,12 @@ function detectDiagramType(mermaidSource: string): DiagramType {
   return 'auto';
 }
 
-function renderSVG(mermaidSource: string, theme?: string, darkMode: boolean = false): string {
+function renderSVG(
+  mermaidSource: string,
+  theme?: string,
+  darkMode: boolean = false,
+  backgroundColor?: string,
+): string {
   const themeConfig = theme && theme in THEMES ? THEMES[theme as keyof typeof THEMES] : undefined;
 
   try {
@@ -66,6 +119,11 @@ function renderSVG(mermaidSource: string, theme?: string, darkMode: boolean = fa
 
     const diagramTheme = getTheme(theme, darkMode ? 'dark' : 'light');
     svg = styleSVG(svg, diagramTheme);
+    svg = injectBackgroundRect(svg, resolveBackground(theme, darkMode, backgroundColor));
+
+    // A rasterizer, and many SVG editors, cannot read `var()` or `color-mix()`.
+    // The theme is fixed at this point, so resolve every color to a literal.
+    svg = flattenSVGColors(svg);
 
     return svg;
   } catch (error) {
@@ -76,7 +134,7 @@ function renderSVG(mermaidSource: string, theme?: string, darkMode: boolean = fa
 async function rasterize(
   svgString: string,
   format: 'png' | 'jpeg',
-  options: { width?: number; quality?: number } = {},
+  options: { width?: number; quality?: number; background?: string } = {},
 ): Promise<Buffer> {
   const width = options.width ?? 1200;
   const quality = options.quality ?? 90;
@@ -86,7 +144,8 @@ async function rasterize(
   });
 
   if (format === 'jpeg') {
-    return pipeline.jpeg({ quality }).toBuffer();
+    // JPEG holds no alpha channel. Flatten so a gap cannot turn black.
+    return pipeline.flatten({ background: options.background ?? '#ffffff' }).jpeg({ quality }).toBuffer();
   }
 
   return pipeline.png().toBuffer();
@@ -101,6 +160,12 @@ export async function renderDiagram(
     mermaid: mermaidSource,
     diagramType: detectDiagramType(mermaidSource),
   };
+
+  const rasterBackground = resolveBackground(
+    options.theme,
+    options.darkMode ?? false,
+    options.backgroundColor,
+  );
 
   if (formats.includes('svg') || formats.includes('png') || formats.includes('jpeg') || formats.includes('html')) {
     try {
@@ -117,7 +182,12 @@ export async function renderDiagram(
       }
 
       if (formats.includes('svg') || formats.includes('png') || formats.includes('jpeg')) {
-        result.svg = renderSVG(mermaidSource, options.theme, options.darkMode ?? false);
+        result.svg = renderSVG(
+          mermaidSource,
+          options.theme,
+          options.darkMode ?? false,
+          options.backgroundColor,
+        );
       }
     } catch (error) {
       throw new Error(`SVG rendering failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -126,7 +196,10 @@ export async function renderDiagram(
 
   if (formats.includes('png') && result.svg) {
     try {
-      result.png = await rasterize(result.svg, 'png', { width: options.width });
+      result.png = await rasterize(result.svg, 'png', {
+        width: options.width,
+        background: rasterBackground,
+      });
     } catch (error) {
       throw new Error(`PNG rasterization failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -134,7 +207,11 @@ export async function renderDiagram(
 
   if (formats.includes('jpeg') && result.svg) {
     try {
-      result.jpeg = await rasterize(result.svg, 'jpeg', { width: options.width, quality: options.quality });
+      result.jpeg = await rasterize(result.svg, 'jpeg', {
+        width: options.width,
+        quality: options.quality,
+        background: rasterBackground,
+      });
     } catch (error) {
       throw new Error(
         `JPEG rasterization failed: ${error instanceof Error ? error.message : String(error)}`,

@@ -17,6 +17,8 @@ export interface DiagramifyConfig {
   apiKey?: string;
   theme?: string;
   darkMode?: boolean;
+  /** Background color for SVG and raster output. Use `transparent` to keep the alpha channel. */
+  backgroundColor?: string;
   defaultOutput?: OutputFormat[];
   temperature?: number;
   maxTokens?: number;

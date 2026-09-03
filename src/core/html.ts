@@ -197,7 +197,12 @@ export function generateInteractiveHTML(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHTML(title)}</title>
-  <script src="https://unpkg.com/@panzoom/panzoom/dist/panzoom.min.js"></script>
+  <!-- Pinned version plus a subresource integrity hash. An unpinned CDN script
+       lets the host change the code in every diagram that was already shared. -->
+  <script src="https://unpkg.com/@panzoom/panzoom@4.6.2/dist/panzoom.min.js"
+          integrity="sha384-irdz3GZoyr9anVd5nSLy63Z39tLtMTNQFFKxhx/KM08C8NkKpZre6M/m4QCUeeB3"
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     :root {
@@ -1124,6 +1129,9 @@ export function generateInteractiveHTML(
         if (window.html2canvas) return resolve(window.html2canvas);
         const s = document.createElement('script');
         s.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
+        s.integrity = 'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H';
+        s.crossOrigin = 'anonymous';
+        s.referrerPolicy = 'no-referrer';
         s.onload = () => resolve(window.html2canvas);
         s.onerror = reject;
         document.head.appendChild(s);

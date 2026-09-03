@@ -33,6 +33,7 @@ export const renderCommand = new Command()
   .option('--dark', 'Use dark mode theme')
   .option('--width <px>', 'Output width in pixels (default: 1200)', '1200')
   .option('--quality <1-100>', 'JPEG quality (default: 90)', '90')
+  .option('--background <color>', 'Background color, or "transparent" to keep the alpha channel')
   .option('--stdout', 'Print SVG to stdout instead of writing files')
   .action(async (inputPath: string, options) => {
     try {
@@ -59,6 +60,7 @@ export const renderCommand = new Command()
         width: parseInt(options.width, 10),
         quality: parseInt(options.quality, 10),
         darkMode: options.dark ?? false,
+        backgroundColor: options.background,
       };
 
       console.error('Rendering diagram...');

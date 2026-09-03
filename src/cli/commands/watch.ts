@@ -49,7 +49,7 @@ export const watchCommand = new Command()
         const html = generateInteractiveHTML(rendered.svg, source, { theme: options.theme, title: `Watch: ${file}` });
         const withReload = html.replace('</body>', INJECTED_RELOAD_SCRIPT.replace('__PORT__', String(wsPort)) + '\n</body>');
         writeFileSync(htmlPath, withReload);
-        console.error(`[diagramify watch] Rendered → ${htmlPath}`);
+        console.error(`[diagramify watch] Rendered: ${htmlPath}`);
         broadcast();
       } catch (err: unknown) {
         console.error('[diagramify watch] Render error:', err instanceof Error ? err.message : String(err));

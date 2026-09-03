@@ -9,19 +9,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Added
+- `--background <color>` on `diagramify render` and `diagramify generate`. Use `transparent` to keep the alpha channel.
+- A color flattener at `src/core/styling/flatten.ts`. It resolves `var()` and `color-mix()` to literal colors before rasterizing.
+- An opaque theme background rectangle in every SVG, so PNG and JPEG exports are not transparent.
+- Regression coverage for raster fidelity: color resolution, background, contrast, and text stroke.
 - Regression coverage for .NET codebase analysis and nonblank PNG raster output
 - `diagramify dev` alias command for the interactive dev server workflow
 - `--open` flag for `diagramify watch` to auto-launch the browser
 - GitHub Issue templates for bug tracking and quality misses
 
 ### Changed
+- Upgraded the Vercel AI SDK from v4 to v7, and every `@ai-sdk` provider from v1 to v4.
+- Upgraded `sharp` to 0.35, `express` to 5, `vitest` to 4, and `np` to 12.
+- Migrated ESLint to version 9 and a flat config at `eslint.config.js`.
+- `npm run check` now also runs `npm run audit:prod`, so a production advisory fails the build.
+- `SECURITY.md` now records zero production advisories, plus the remaining development-only ones.
 - Improved .NET/C# analysis for `Program.cs`, `.csproj` dependencies, module directories, minimal API endpoints, Docker Compose services, and project-reference links
 - `diagramify render` now validates requested output formats and can write `.mmd` output explicitly
 - `diagramify preview` (and `dev`) now support full WebSocket hot-reload for `.mmd` file watching
-- `SECURITY.md` now tracks known transitive AI SDK vulnerabilities with workaround guidance
 
 ### Fixed
-- PNG/JPEG raster exports no longer render as all-black images when SVG theme styles use CSS variables
+- **Every raster export was unreadable.** A rasterizer cannot read CSS `var()` or
+  `color-mix()`, so all node, edge, and text colors fell back to black. Colors now
+  resolve to literals before rasterizing.
+- **Node labels were covered by an outline.** The `.node` rule set a stroke on the
+  group, which every label glyph inherited. The rule now targets shape children only,
+  and label text sets `stroke: none`.
+- PNG and JPEG exports no longer have a transparent background, which made a dark theme unreadable on a light page.
+- JPEG export now flattens onto the theme background, because JPEG holds no alpha channel.
+- `RenderOptions.backgroundColor` was declared but never used. It now reaches the SVG and both raster formats.
+- Removed all emoji from CLI output.
 - Unsupported CLI output formats now fail loudly instead of exiting successfully without writing files
 - HTML Viewer: Initial diagram load now scales and pans to perfectly fit-to-content
 - HTML Viewer: Minimap now renders live nodes via canvas instead of relying on broken SVG clones

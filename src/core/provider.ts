@@ -66,12 +66,12 @@ export async function callLLM(
     system: systemPrompt,
     prompt: userPrompt,
     temperature: temperature ?? 0.7,
-    maxTokens: maxTokens,
+    maxOutputTokens: maxTokens,
     ...(providerOptions ? { providerOptions } : {}),
   });
 
   return {
     text: result.text,
-    tokensUsed: result.usage.totalTokens,
+    tokensUsed: result.usage.totalTokens ?? 0,
   };
 }

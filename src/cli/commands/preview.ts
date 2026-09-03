@@ -121,7 +121,7 @@ export const previewCommand = new Command()
     const httpServer = createServer(app);
     httpServer.listen(port, () => {
       const url = `http://localhost:${port}`;
-      console.log(`\n  🖼  diagramify preview`);
+      console.log(`\n  diagramify preview`);
       console.log(`  ──────────────────────────────`);
       console.log(`  Preview  : ${url}`);
       console.log(`  Hot-reload WebSocket on :${wsPort}`);

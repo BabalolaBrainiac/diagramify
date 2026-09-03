@@ -1,6 +1,7 @@
 import { DiagramTheme, generateThemeCSS } from './themes.js';
 
-const NODE_SHADOW_CSS = `g.node rect { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.12)); }`;
+const NODE_SHADOW_CSS = `g.node > rect { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.12)); }
+g.node > text { stroke: none; }`;
 
 export function styleSVG(svg: string, theme: DiagramTheme): string {
   const cleanSVG = svg.replace(/<\?xml[^?]*\?>/, '');

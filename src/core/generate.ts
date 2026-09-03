@@ -189,6 +189,7 @@ IMPORTANT: ${startInstruction}`;
   const renderResult = await renderDiagram(finalMermaidSource, formats, {
     theme: config.theme,
     darkMode: config.darkMode,
+    backgroundColor: config.backgroundColor,
   });
 
   return {

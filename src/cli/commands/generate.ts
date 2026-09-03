@@ -37,6 +37,7 @@ export const generateCommand = new Command()
   .option('--name <name>', 'Base filename for outputs (default: diagram)')
   .option('--theme <theme>', 'Diagram theme name')
   .option('--dark', 'Use dark mode theme')
+  .option('--background <color>', 'Background color, or "transparent" to keep the alpha channel')
   .option('--provider <name>', 'LLM provider: anthropic|openai|google')
   .option('--model <id>', 'Model ID override')
   .option('--direction <dir>', 'Flow direction: LR, TD, TB, RL (default: LR)')
@@ -60,6 +61,7 @@ export const generateCommand = new Command()
           model: options.model,
           theme: options.theme,
           darkMode: options.dark ?? false,
+          backgroundColor: options.background,
           defaultOutput: formats,
           direction: options.direction as any,
         },
