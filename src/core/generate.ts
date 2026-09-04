@@ -1,8 +1,49 @@
 import type { DiagramifyResult, GenerateOptions } from './types.js';
 import { loadConfig } from './config.js';
-import { resolveModel, callLLM } from './provider.js';
+import { resolveModel, callLLM, callLLMForObject, hasCredentials } from './provider.js';
 import { renderDiagram } from './render.js';
+import { basename, resolve } from 'path';
 import { analyzeCodebase } from './analyze.js';
+import {
+  type ArchitectureGraph,
+  architectureGraphSchema,
+  normalizeGraph,
+  validateGraph,
+} from './ir.js';
+import { graphToMermaid, mermaidToGraph } from './ir-mermaid.js';
+import { analysisToGraph } from './ir-analyzer.js';
+
+/**
+ * Prompt for schema-constrained output.
+ *
+ * It is far shorter than the free-text prompt below, because the schema already
+ * states the shape. The prompt only has to say what to include, not how to
+ * format it. That is why the result no longer changes with the provider.
+ */
+const IR_SYSTEM_PROMPT = `You are a senior systems architect. You map a system into a structured graph.
+
+COVERAGE - favour completeness. 20 to 60 nodes suits any non-trivial system.
+- Every database, cache, queue, and message broker the code actually uses.
+- Every external service the code calls: Stripe, Auth0, OpenAI, Twilio, SendGrid.
+- Every observability component: Prometheus, Grafana, Datadog, Sentry, OpenTelemetry.
+- Every edge component: CloudFront, Cloudflare, Vercel Edge, Fastly.
+- Every frontend framework, as its own node.
+- Each microservice or module as its own node. Never merge them into one node.
+
+NAMES - use the real product name. Write "PostgreSQL", not "Database". Write
+"Redis", not "Cache". Split a cloud provider into the services in use, such as
+Lambda, S3, and RDS.
+
+GROUPS - place every node in a tier: Frontend, Edge, Backend Services, Data
+Layer, Cache, Messaging, Observability, Auth, AI Providers, External.
+
+EDGES - every node needs at least one edge. Label each edge with what crosses
+it: REST, gRPC, SQL, events, webhook, OIDC, inference. Mark a queue, an event,
+and a webhook as "async". Wire a layered module explicitly: presentation calls
+application, application calls domain and infrastructure, infrastructure reaches
+the store.
+
+Return the graph only. Add no commentary.`;
 
 const SYSTEM_PROMPT = `You are a senior systems architect producing detailed, production-grade Mermaid architecture diagrams.
 
@@ -95,76 +136,171 @@ async function retryWithCorrection(
   return stripMarkdownFences(result.text);
 }
 
-export async function generateDiagram(options: GenerateOptions): Promise<DiagramifyResult> {
+/** Builds the graph, then renders it. The graph is the product; formats follow. */
+export async function generateGraph(
+  options: GenerateOptions,
+): Promise<{ graph: ArchitectureGraph; tokensUsed: number }> {
   const config = await loadConfig(options.config);
-  const model = resolveModel(config);
 
+  let analysis: Awaited<ReturnType<typeof analyzeCodebase>> | null = null;
   let contextSummary = '';
-  let analysis: any = null;
+  const title = options.path ? basename(resolve(options.path)) : undefined;
+  // Mermaid treats TB and TD as the same direction. The IR keeps one name.
+  const direction = (config.direction === 'TB' ? 'TD' : config.direction) ?? 'LR';
 
   if (options.input === 'codebase') {
-    const path = options.path || process.cwd();
-    analysis = await analyzeCodebase(path);
+    analysis = await analyzeCodebase(options.path || process.cwd());
     contextSummary = analysis.summary;
-  } else if (options.input === 'description') {
+  } else {
     contextSummary = options.description || '';
   }
 
-  const diagramTypeSpec =
-    options.diagramType && options.diagramType !== 'auto'
-      ? `Use the "${options.diagramType}" diagram type.`
-      : 'Choose the most appropriate diagram type based on the content.';
-  const startInstruction =
-    options.diagramType === 'flowchart'
-      ? `Start the diagram with "flowchart ${config.direction || 'LR'}".`
-      : options.diagramType && options.diagramType !== 'auto'
-        ? 'Start with the canonical Mermaid declaration for the requested diagram type.'
-        : `Start with the canonical declaration for the chosen diagram type. If it is a flowchart, use direction "${config.direction || 'LR'}".`;
+  // Path 1: no model. The analyzer alone fills the graph.
+  if (options.noLLM) {
+    if (!analysis) {
+      throw new Error(
+        'Offline mode needs a codebase to analyze. Pass --path, or drop --no-llm to use a description.',
+      );
+    }
+    return {
+      graph: analysisToGraph(analysis, { title, direction }),
+      tokensUsed: 0,
+    };
+  }
 
-  const serviceHint = analysis?.detectedServices?.length > 0
-    ? `\nDetected services in codebase: ${analysis.detectedServices.join(', ')}. Use these exact names as node labels for icon matching.`
-    : '';
+  if (!hasCredentials(config)) {
+    throw new Error(
+      `No API key found for provider "${config.provider}". ` +
+        'Set the provider key, or run with --no-llm to build the diagram from the codebase alone.',
+    );
+  }
 
-  const endpointHint = analysis?.apiEndpoints?.length > 0
-    ? `\nDetected API endpoints: ${analysis.apiEndpoints.slice(0, 10).map((e: any) => `${e.method ?? 'ANY'} ${e.path}`).join(', ')}.`
-    : '';
+  const model = resolveModel(config);
+  const userPrompt = buildUserPrompt(contextSummary, analysis, options, direction);
 
-  const dirHint = analysis?.serviceDirectories?.length > 0
-    ? `\nService directories detected: ${analysis.serviceDirectories.join(', ')}. Create subgraphs for each.`
-    : '';
+  // Path 2: schema-constrained output. This is the default.
+  try {
+    const result = await callLLMForObject(
+      model,
+      IR_SYSTEM_PROMPT,
+      userPrompt,
+      architectureGraphSchema,
+      config.maxTokens,
+      config.temperature,
+    );
 
-  const linksHint = analysis?.internalLinks?.length > 0
-    ? `\nInternal Monorepo links detected (A depends on B): ${analysis.internalLinks.map((l: any) => `${l.from} -> ${l.to}`).join(', ')}.`
-    : '';
+    const graph = normalizeGraph(result.object, {
+      source: config.provider,
+      language: analysis?.language,
+      framework: analysis?.framework,
+    });
+    graph.title = graph.title ?? title;
 
-  const userPrompt = `${diagramTypeSpec}
+    if (graph.nodes.length > 0) {
+      return { graph, tokensUsed: result.tokensUsed };
+    }
+  } catch (error) {
+    // A provider without structured output support falls through to text.
+    if (process.env.DIAGRAMIFY_DEBUG) {
+      console.error('Structured output failed, falling back to text:', error);
+    }
+  }
 
-${contextSummary}
-${serviceHint}${endpointHint}${dirHint}${linksHint}
+  // Path 3: free-text Mermaid. Kept only for a provider that cannot do path 2.
+  const textResult = await generateMermaidByText(model, userPrompt, config);
+  const graph = mermaidToGraph(textResult.mermaid, title);
+  graph.meta = { source: `${config.provider} (text fallback)`, language: analysis?.language };
 
-${options.extraContext ? `Additional instructions: ${options.extraContext}` : ''}
+  return { graph, tokensUsed: textResult.tokensUsed };
+}
 
-Generate a Mermaid diagram representing the above.
-IMPORTANT: ${startInstruction}`;
+export async function generateDiagram(options: GenerateOptions): Promise<DiagramifyResult> {
+  const config = await loadConfig(options.config);
+  const { graph, tokensUsed } = await generateGraph(options);
 
+  const problems = validateGraph(graph);
+  if (problems.length > 0 && process.env.DIAGRAMIFY_DEBUG) {
+    console.error(`Graph warnings:\n  ${problems.join('\n  ')}`);
+  }
+
+  const mermaidSource = graphToMermaid(graph);
+  const formats = options.config?.defaultOutput || config.defaultOutput || ['svg', 'mmd'];
+
+  const renderResult = await renderDiagram(mermaidSource, formats, {
+    theme: config.theme,
+    darkMode: config.darkMode,
+    backgroundColor: config.backgroundColor,
+    offlineMode: config.offlineMode,
+    title: graph.title,
+    graph,
+  });
+
+  return {
+    ...renderResult,
+    mermaid: mermaidSource,
+    graph,
+    tokensUsed,
+  };
+}
+
+function buildUserPrompt(
+  contextSummary: string,
+  analysis: Awaited<ReturnType<typeof analyzeCodebase>> | null,
+  options: GenerateOptions,
+  direction: string,
+): string {
+  const hints: string[] = [];
+
+  if (analysis?.detectedServices?.length) {
+    hints.push(
+      `Services detected in the codebase: ${analysis.detectedServices.join(', ')}. ` +
+        'Use these exact names as node labels, so icons match.',
+    );
+  }
+  if (analysis?.apiEndpoints?.length) {
+    hints.push(
+      `API endpoints detected: ${analysis.apiEndpoints
+        .slice(0, 10)
+        .map((e) => `${e.method ?? 'ANY'} ${e.path}`)
+        .join(', ')}.`,
+    );
+  }
+  if (analysis?.serviceDirectories?.length) {
+    hints.push(`Module directories: ${analysis.serviceDirectories.join(', ')}. Give each one a node.`);
+  }
+  if (analysis?.internalLinks?.length) {
+    hints.push(
+      `Internal dependencies (A depends on B): ${analysis.internalLinks
+        .map((l) => `${l.from} -> ${l.to}`)
+        .join(', ')}.`,
+    );
+  }
+
+  return [
+    contextSummary,
+    hints.join('\n'),
+    options.extraContext ? `Additional instructions: ${options.extraContext}` : '',
+    `Use direction "${direction}".`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/** The old text path. Reached only when a provider cannot fill a schema. */
+async function generateMermaidByText(
+  model: ReturnType<typeof resolveModel>,
+  userPrompt: string,
+  config: Awaited<ReturnType<typeof loadConfig>>,
+): Promise<{ mermaid: string; tokensUsed: number }> {
   const llmResult = await callLLM(
     model,
     SYSTEM_PROMPT,
-    userPrompt,
+    `${userPrompt}\n\nGenerate a Mermaid diagram representing the above.`,
     config.maxTokens,
     config.temperature,
   );
 
   let mermaidSource = stripMarkdownFences(llmResult.text);
-  
-  if (mermaidSource.startsWith('flowchart') || mermaidSource.startsWith('graph')) {
-    mermaidSource = mermaidSource
-      .replace(/\[\(([^)]+)\)\]/g, '[$1]')   // cylinders
-      .replace(/\(\(([^)]+)\)\)/g, '[$1]')   // circles
-      .replace(/\{([^{}]+)\}/g, '[$1]')      // diamonds
-      .replace(/>([^\]]+)\]/g, '[$1]')       // flags
-      .replace(/\(\[([^\]]+)\]\)/g, '[$1]'); // stadiums
-  }
 
   if (!validateMermaidSource(mermaidSource)) {
     const corrected = await retryWithCorrection(model, mermaidSource, SYSTEM_PROMPT);
@@ -174,27 +310,8 @@ IMPORTANT: ${startInstruction}`;
   }
 
   if (!validateMermaidSource(mermaidSource)) {
-    throw new Error(
-      `Generated Mermaid source is invalid even after correction:\n${mermaidSource}`,
-    );
+    throw new Error(`Generated Mermaid source is invalid even after correction:\n${mermaidSource}`);
   }
 
-  // Add layout directives after validation so corrected source is what gets rendered.
-  let finalMermaidSource = mermaidSource;
-  if (finalMermaidSource.startsWith('flowchart') || finalMermaidSource.startsWith('graph')) {
-    finalMermaidSource = `%%{init: {"flowchart": {"nodeSpacing": 40, "rankSpacing": 70, "curve": "basis"}}}%%\n${finalMermaidSource}`;
-  }
-
-  const formats = options.config?.defaultOutput || config.defaultOutput || ['svg', 'mmd'];
-  const renderResult = await renderDiagram(finalMermaidSource, formats, {
-    theme: config.theme,
-    darkMode: config.darkMode,
-    backgroundColor: config.backgroundColor,
-  });
-
-  return {
-    ...renderResult,
-    mermaid: finalMermaidSource, // override with directive
-    tokensUsed: llmResult.tokensUsed,
-  };
+  return { mermaid: mermaidSource, tokensUsed: llmResult.tokensUsed };
 }

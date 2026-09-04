@@ -1,4 +1,5 @@
-import { generateText, type LanguageModel } from 'ai';
+import { generateObject, generateText, type LanguageModel } from 'ai';
+import type { z } from 'zod';
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
@@ -74,4 +75,54 @@ export async function callLLM(
     text: result.text,
     tokensUsed: result.usage.totalTokens ?? 0,
   };
+}
+
+/**
+ * Asks the model to fill a schema instead of writing text.
+ *
+ * This is what makes provider choice stop mattering. A model no longer has to
+ * be good at Mermaid formatting. It only has to return the shape the schema
+ * describes, which every serious provider supports.
+ */
+export async function callLLMForObject<T>(
+  model: LanguageModel,
+  systemPrompt: string,
+  userPrompt: string,
+  schema: z.ZodType<T>,
+  maxTokens?: number,
+  temperature?: number,
+): Promise<{ object: T; tokensUsed: number }> {
+  // A thinking model spends its output budget on hidden reasoning, which
+  // truncates the answer. Structured output needs the whole budget.
+  const providerOptions = isGeminiThinkingModel(model)
+    ? { google: { thinkingConfig: { thinkingBudget: 0 } } }
+    : undefined;
+
+  const result = await generateObject({
+    model,
+    schema,
+    system: systemPrompt,
+    prompt: userPrompt,
+    temperature: temperature ?? 0.3,
+    maxOutputTokens: maxTokens,
+    ...(providerOptions ? { providerOptions } : {}),
+  });
+
+  return {
+    object: result.object as T,
+    tokensUsed: result.usage.totalTokens ?? 0,
+  };
+}
+
+/** True when the provider can be reached. Used to pick a path before a call. */
+export function hasCredentials(config: DiagramifyConfig): boolean {
+  if (config.apiKey) {
+    return true;
+  }
+  const names: Record<ProviderName, string[]> = {
+    anthropic: ['ANTHROPIC_API_KEY'],
+    openai: ['OPENAI_API_KEY'],
+    google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+  };
+  return (names[config.provider as ProviderName] ?? []).some((name) => Boolean(process.env[name]));
 }

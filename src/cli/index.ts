@@ -7,6 +7,7 @@ import { previewCommand } from './commands/preview.js';
 import { watchCommand } from './commands/watch.js';
 import { makeDiffCommand } from './commands/diff.js';
 import { makeCICommand } from './commands/ci.js';
+import { checkCommand } from './commands/check.js';
 
 program
   .name('diagramify')
@@ -20,6 +21,7 @@ program.addCommand(watchCommand);
 program.addCommand(initCommand);
 program.addCommand(makeDiffCommand());
 program.addCommand(makeCICommand());
+program.addCommand(checkCommand);
 
 // `dev` is a discoverable alias for `preview` — same options, clearer name for development workflows
 const devCommand = new Command()

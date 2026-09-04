@@ -17,11 +17,17 @@ Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three
 - **Interactive HTML output** — drag nodes, pan/zoom, edit labels, click edges to highlight connections, search, theme switcher, minimap, undo/redo, snap-to-grid, export
 - **Fit-to-content on load** — large diagrams auto-scale to fill the viewport on open
 - **Orthogonal edge routing** — edges draw as clean L/Z-shaped paths with rounded corners, not long diagonal arcs
-- **Multiple output formats** — `html`, `svg`, `png`, `jpeg`, `mmd`
+- **Works with no LLM at all** — `--no-llm` builds the diagram from the codebase alone. No API key, no network, no cost
+- **Typed architecture graph** — one IR that every renderer and exporter reads. A model fills a schema, so the result does not change with the provider
+- **Multiple output formats** — `html`, `svg`, `png`, `jpeg`, `mmd`, `pdf`, `drawio`, `excalidraw`, `json`
+- **Vector PDF** — real shapes and selectable text, not a picture. No dependency and no headless browser
+- **Editable handoff** — `drawio` and `excalidraw` exports keep the layout, so a reviewer can correct the diagram in a tool they already run
+- **Drift gate** — `diagramify check` fails a pull request when the diagram no longer matches the code, and names the services that changed
+- **Fully offline viewer** — `--offline` produces one HTML file that makes no network request
 - **Diagram diffing** — `diagramify diff` compares two `.mmd` files and highlights changes
 - **CI integration** — `diagramify ci` generates GitHub Actions / GitLab CI workflows
 - **Hot-reload preview** — `diagramify preview` and `diagramify watch` serve and auto-reload on file changes via WebSocket
-- **LLM-agnostic** — Claude, OpenAI, or Google Gemini
+- **LLM-agnostic** — Claude, OpenAI, or Google Gemini, through schema-constrained output
 - **React component** — embed the interactive viewer in any React app
 - **No browser required** — pure TypeScript rendering, no Puppeteer
 
@@ -85,6 +91,7 @@ diagramify render diagram.mmd --out html,svg,png
 | `diagramify preview [--file]` | Interactive editor with POST API; file watching with `--file` | ✅ | ✅ |
 | `diagramify watch <file>` | Lightweight `.mmd` file watcher; no Express | ✅ | ✅ |
 | `diagramify dev [--file]` | Alias for `preview` — recommended entry point for dev workflows | ✅ | ✅ |
+| `diagramify check` | Fail a build when the diagram no longer matches the code | — | — |
 | `diagramify diff` | Compare two `.mmd` files visually | — | — |
 | `diagramify ci` | Generate CI workflow files | — | — |
 | `diagramify init` | Scaffold a config file | — | — |
@@ -234,6 +241,48 @@ diagramify watch <file> [--port <n>] [--theme <t>] [--open] [--outdir <dir>]
 
 ```bash
 diagramify watch diagram.mmd --open --theme dark
+```
+
+---
+
+### `diagramify check`
+
+Compares the committed diagram against the code, and reports what changed.
+
+The check runs on the architecture graph, not on an image, so it names the
+services that were added, removed, or rewired. It uses the analyzer by default,
+so it needs no API key and runs on any build agent.
+
+```bash
+# Create the baseline, and commit it
+diagramify check --update
+
+# Fail the build when the code and the diagram disagree
+diagramify check
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--path <dir>` | Codebase root (default: current directory) |
+| `--baseline <file>` | Committed graph to compare against (default: `diagrams/architecture.json`) |
+| `--update` | Write the current graph to the baseline instead of comparing |
+| `--llm` | Use the configured provider instead of the analyzer |
+| `--json` | Print the report as JSON |
+
+The command exits with code `1` when the diagram has drifted, which fails a CI
+step. Example output:
+
+```text
+The diagram no longer matches the code.
+
+Services added (2)
+  + Kafka
+  + Amazon S3
+
+Services removed (1)
+  - Redis
+
+Run "diagramify check --update" and commit diagrams/architecture.json to accept the change.
 ```
 
 ---

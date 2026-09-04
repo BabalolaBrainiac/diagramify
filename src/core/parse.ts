@@ -1,7 +1,7 @@
 export interface ParsedNode {
   id: string;
   label: string;
-  shape: 'rect' | 'round' | 'diamond' | 'stadium' | 'circle';
+  shape: 'rect' | 'round' | 'diamond' | 'stadium' | 'circle' | 'cylinder' | 'hexagon';
 }
 
 export interface ParsedEdge {
@@ -35,9 +35,9 @@ export function parseMermaidSource(source: string): ParsedGraph {
   const nodeMap = new Map<string, ParsedNode>();
   const subgraphStack: { id: string; label: string; nodeIds: string[] }[] = [];
 
-  const addNode = (nodeId: string, label: string, shape: ParsedNode['shape']) => {
+  const addNode = (nodeId: string, label: string | undefined, shape: ParsedNode['shape']) => {
     if (!nodeMap.has(nodeId)) {
-      const node: ParsedNode = { id: nodeId, label, shape };
+      const node: ParsedNode = { id: nodeId, label: (label ?? nodeId).trim() || nodeId, shape };
       nodes.push(node);
       nodeMap.set(nodeId, node);
       if (subgraphStack.length > 0) {
@@ -73,7 +73,11 @@ export function parseMermaidSource(source: string): ParsedGraph {
     const nodePatterns = [
       { regex: /([a-zA-Z0-9_-]+)\[\[(.*?)\]\]/g, shape: 'stadium' as const },
       { regex: /([a-zA-Z0-9_-]+)\(\((.*?)\)\)/g, shape: 'circle' as const },
-      { regex: /([a-zA-Z0-9_-]+)\[\(.*?\)\]/g, shape: 'stadium' as const },
+      // A cylinder writes `id[(label)]`. The label needs its own capture group,
+      // or the node ends up with no label at all.
+      { regex: /([a-zA-Z0-9_-]+)\[\((.*?)\)\]/g, shape: 'cylinder' as const },
+      { regex: /([a-zA-Z0-9_-]+)\{\{(.*?)\}\}/g, shape: 'hexagon' as const },
+      { regex: /([a-zA-Z0-9_-]+)\(\[(.*?)\]\)/g, shape: 'stadium' as const },
       { regex: /([a-zA-Z0-9_-]+)\{(.*?)\}/g, shape: 'diamond' as const },
       { regex: /([a-zA-Z0-9_-]+)\[(.*?)\]/g, shape: 'rect' as const },
       { regex: /([a-zA-Z0-9_-]+)\((.*?)\)/g, shape: 'round' as const },

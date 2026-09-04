@@ -520,7 +520,7 @@ export interface SimpleIconConfig {
 import { AWS_INLINE_SVG } from './aws-inline.js';
 import { INLINE_SVG } from './inline-icons.js';
 
-export function getIconURL(service: string, hexColor?: string): string {
+export function getIconURL(service: string, hexColor?: string, offline = false): string {
   const normalizedService = service.toLowerCase().trim();
   let mappedSlug = serviceToSlugMap[normalizedService];
   
@@ -568,8 +568,9 @@ export function getIconURL(service: string, hexColor?: string): string {
     return 'data:image/svg+xml;base64,' + Buffer.from(colored).toString('base64');
   }
 
-  // If we found a mapped slug, try CDN
-  if (mappedSlug) {
+  // A mapped slug that has no inline copy is served from a CDN. Offline mode
+  // must issue no network request, so it uses the drawn fallback instead.
+  if (mappedSlug && !offline) {
     return `https://cdn.simpleicons.org/${slug}/${color.replace('#', '')}`;
   }
 

@@ -16,3 +16,34 @@ export type {
   OutputFormat,
   ProviderName,
 } from './core/types.js';
+
+// The Architecture IR. Every renderer and exporter reads this one type.
+export {
+  architectureGraphSchema,
+  deserializeGraph,
+  emptyGraph,
+  normalizeGraph,
+  safeId,
+  serializeGraph,
+  validateGraph,
+} from './core/ir.js';
+export type {
+  ArchitectureGraph,
+  ArchitectureGraphInput,
+  Direction,
+  EdgeKind,
+  IREdge,
+  IRGroup,
+  IRNode,
+  NodeLayout,
+  NodeShape,
+} from './core/ir.js';
+
+export { generateGraph } from './core/generate.js';
+export { analysisToGraph } from './core/ir-analyzer.js';
+export { graphToMermaid, mermaidToGraph } from './core/ir-mermaid.js';
+export { attachLayout, hasLayout, readExtent } from './core/ir-layout.js';
+export { svgToPDF } from './core/export/pdf.js';
+export { graphToDrawio, graphToExcalidraw } from './core/export/editable.js';
+export { compareGraphs, formatDriftReport } from './core/drift.js';
+export type { DriftReport, EdgeChange, NodeChange } from './core/drift.js';

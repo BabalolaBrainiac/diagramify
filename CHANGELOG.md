@@ -9,42 +9,98 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Added
-- `--background <color>` on `diagramify render` and `diagramify generate`. Use `transparent` to keep the alpha channel.
-- A color flattener at `src/core/styling/flatten.ts`. It resolves `var()` and `color-mix()` to literal colors before rasterizing.
-- An opaque theme background rectangle in every SVG, so PNG and JPEG exports are not transparent.
-- Regression coverage for raster fidelity: color resolution, background, contrast, and text stroke.
-- Regression coverage for .NET codebase analysis and nonblank PNG raster output
-- `diagramify dev` alias command for the interactive dev server workflow
-- `--open` flag for `diagramify watch` to auto-launch the browser
-- GitHub Issue templates for bug tracking and quality misses
+
+**The Architecture IR.** One typed graph now sits between analysis and output.
+Before this, the pipeline built a structured analysis, flattened it to English
+prose, asked a model to rebuild it as Mermaid text, then repaired the text with
+regular expressions. Structure was built, discarded, and guessed back.
+
+- `src/core/ir.ts`: the `ArchitectureGraph` type, a schema for constrained model
+  output, repair for malformed model output, and stable serialization.
+- `src/core/ir-analyzer.ts`: builds the graph from a codebase with no model.
+- `src/core/ir-mermaid.ts`: converts between the graph and Mermaid, both ways.
+- `src/core/ir-layout.ts`: lifts geometry from a rendered SVG back into the graph.
+- `generate` now asks the model to fill the schema. Free-text Mermaid remains
+  only as a fallback for a provider that cannot do it.
+
+**Zero-provider mode.** `--no-llm` builds the diagram from the codebase alone.
+No API key, no network, and no cost. It maps a real .NET service to 21 nodes.
+
+**New output formats.** `pdf`, `drawio`, `excalidraw`, and `json`, on both
+`render` and `generate`.
+
+- The PDF is true vector, with selectable text and real arrowheads. It uses the
+  base PDF fonts, so nothing is embedded and no headless browser is needed.
+- `drawio` and `excalidraw` keep the rendered layout, so a reviewer can correct
+  the diagram in a tool they already run.
+- `json` writes the graph itself, which the drift gate compares.
+
+**Drift gate.** `diagramify check` compares the committed graph against the code
+and exits non-zero when they differ. It reports the services added, removed, and
+rewired, because it compares the graph and not an image.
+
+**Offline mode.** `--offline` produces one HTML file that makes no network
+request at all. `offlineMode` was declared in the types before this and did
+nothing.
+
+- `--background <color>` on `render` and `generate`. Use `transparent` to keep
+  the alpha channel.
+- Regression coverage for the IR, drift, layout, all exporters, raster fidelity,
+  and the viewer. The suite went from 113 to 208 tests.
 
 ### Changed
-- Upgraded the Vercel AI SDK from v4 to v7, and every `@ai-sdk` provider from v1 to v4.
+
+- The viewer loads no third-party script. Pan and zoom, and the raster export,
+  are now built in. Both used to come from a CDN.
+- The viewer's SVG export writes real shapes and text. It used to wrap each card
+  in an embedded HTML object, which only a browser could draw, so the file
+  opened as an empty box in Illustrator, Figma, and Inkscape.
+- Upgraded the Vercel AI SDK from v4 to v7, and every `@ai-sdk` provider v1 to v4.
 - Upgraded `sharp` to 0.35, `express` to 5, `vitest` to 4, and `np` to 12.
 - Migrated ESLint to version 9 and a flat config at `eslint.config.js`.
-- `npm run check` now also runs `npm run audit:prod`, so a production advisory fails the build.
-- `SECURITY.md` now records zero production advisories, plus the remaining development-only ones.
-- Improved .NET/C# analysis for `Program.cs`, `.csproj` dependencies, module directories, minimal API endpoints, Docker Compose services, and project-reference links
-- `diagramify render` now validates requested output formats and can write `.mmd` output explicitly
-- `diagramify preview` (and `dev`) now support full WebSocket hot-reload for `.mmd` file watching
+- `npm run check` now also runs `npm run audit:prod`, so a production advisory
+  fails the build.
+- Improved .NET/C# analysis for `Program.cs`, `.csproj` dependencies, module
+  directories, minimal API endpoints, Docker Compose services, and
+  project-reference links.
+- `diagramify render` validates requested output formats and can write `.mmd`.
+- `diagramify preview` and `dev` support WebSocket hot reload for `.mmd` files.
 
 ### Fixed
-- **Every raster export was unreadable.** A rasterizer cannot read CSS `var()` or
-  `color-mix()`, so all node, edge, and text colors fell back to black. Colors now
-  resolve to literals before rasterizing.
-- **Node labels were covered by an outline.** The `.node` rule set a stroke on the
-  group, which every label glyph inherited. The rule now targets shape children only,
-  and label text sets `stroke: none`.
-- PNG and JPEG exports no longer have a transparent background, which made a dark theme unreadable on a light page.
-- JPEG export now flattens onto the theme background, because JPEG holds no alpha channel.
-- `RenderOptions.backgroundColor` was declared but never used. It now reaches the SVG and both raster formats.
+
+- **Every raster export was unreadable.** A rasterizer cannot read CSS `var()`
+  or `color-mix()`, so all node, edge, and text colors fell back to black.
+  Colors now resolve to literals before rasterizing.
+- **Node labels were covered by an outline.** The `.node` rule set a stroke on
+  the group, which every label glyph inherited. At 13px text a 1.5px outline hid
+  the letters. The rule now targets shape children only.
+- **The minimap and the node detail panel never worked.** Both were declared
+  after the script that wires them, so the lookup returned null and each feature
+  was silently dead.
+- **Fit-to-content never zoomed in.** A hard cap of 1 left a small diagram
+  stranded in a large empty canvas.
+- **A cylinder node had no label.** The Mermaid parser pattern for `id[(label)]`
+  had no capture group for the label.
+- PNG and JPEG exports no longer have a transparent background, which made a
+  dark theme unreadable on a light page.
+- JPEG export flattens onto the theme background, because JPEG holds no alpha.
+- `RenderOptions.backgroundColor` was declared but never used.
+- An unpinned CDN script let the host change code inside a diagram that had
+  already been shared. Every CDN script is now gone.
+- The analyzer drew one node per spelling of a service, so `redis`, `Redis`, and
+  a compose entry became three nodes. It now draws one.
+- The analyzer no longer draws a health-check package as an architecture
+  component, and no longer writes "Postgre SQL" for "PostgreSQL".
+- The Excalidraw export anchored every arrow to the left and right edges, which
+  drew long diagonals across a top-down diagram. Arrows now follow the route the
+  renderer drew.
+- An editable export taken on its own kept no layout, because the SVG render was
+  skipped.
 - Removed all emoji from CLI output.
-- Unsupported CLI output formats now fail loudly instead of exiting successfully without writing files
-- HTML Viewer: Initial diagram load now scales and pans to perfectly fit-to-content
-- HTML Viewer: Minimap now renders live nodes via canvas instead of relying on broken SVG clones
-- HTML Viewer: Undo/Redo now captures full DOM state, properly reverting structural changes
-- HTML Viewer: Grid snap now applies correctly on normal drag `pointerup`
-- HTML Viewer: Layer toggles now work via injected `data-subgraph` attributes
+- HTML viewer: initial load scales and pans to fit the content.
+- HTML viewer: undo and redo capture full DOM state.
+- HTML viewer: grid snap applies on a normal drag `pointerup`.
+- HTML viewer: layer toggles work through injected `data-subgraph` attributes.
 
 ## [0.2.1] — 2026-06-11
 

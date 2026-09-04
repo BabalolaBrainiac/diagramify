@@ -4,7 +4,9 @@ import { join, resolve } from 'path';
 import { renderDiagram } from '../../core/render.js';
 import type { OutputFormat, RenderOptions } from '../../core/types.js';
 
-const VALID_OUTPUT_FORMATS = new Set<OutputFormat>(['svg', 'png', 'jpeg', 'html', 'mmd']);
+const VALID_OUTPUT_FORMATS = new Set<OutputFormat>([
+  'svg', 'png', 'jpeg', 'html', 'mmd', 'pdf', 'drawio', 'excalidraw', 'json',
+]);
 
 function parseOutputFormats(value: string | undefined, defaults: OutputFormat[]): OutputFormat[] {
   const formats = value
@@ -24,9 +26,15 @@ function parseOutputFormats(value: string | undefined, defaults: OutputFormat[])
 
 export const renderCommand = new Command()
   .name('render')
-  .description('Render an existing .mmd file to SVG, PNG, JPEG, HTML, or Mermaid source')
+  .description(
+    'Render an existing .mmd file to SVG, PNG, JPEG, HTML, PDF, draw.io, Excalidraw, ' +
+    'Mermaid source, or the architecture graph as JSON',
+  )
   .argument('<input>', 'Path to .mmd file or "-" for stdin')
-  .option('--out <formats>', 'Output formats: svg,png,jpeg,html,mmd (default: svg,html)')
+  .option(
+    '--out <formats>',
+    'Output formats: svg,png,jpeg,html,mmd,pdf,drawio,excalidraw,json (default: svg,html)',
+  )
   .option('--outdir <dir>', 'Output directory (default: current directory)')
   .option('--name <name>', 'Output filename (default: diagram)')
   .option('--theme <theme>', 'Diagram theme name')
@@ -34,6 +42,7 @@ export const renderCommand = new Command()
   .option('--width <px>', 'Output width in pixels (default: 1200)', '1200')
   .option('--quality <1-100>', 'JPEG quality (default: 90)', '90')
   .option('--background <color>', 'Background color, or "transparent" to keep the alpha channel')
+  .option('--offline', 'Make the HTML viewer self-contained, with no network request')
   .option('--stdout', 'Print SVG to stdout instead of writing files')
   .action(async (inputPath: string, options) => {
     try {
@@ -61,6 +70,8 @@ export const renderCommand = new Command()
         quality: parseInt(options.quality, 10),
         darkMode: options.dark ?? false,
         backgroundColor: options.background,
+        title: options.name || 'diagram',
+        offlineMode: options.offline === true,
       };
 
       console.error('Rendering diagram...');
@@ -105,6 +116,30 @@ export const renderCommand = new Command()
           const mmdPath = join(outDir, `${baseName}.mmd`);
           writeFileSync(mmdPath, result.mermaid);
           console.error(`Generated: ${mmdPath}`);
+        }
+
+        if (formats.includes('pdf') && result.pdf) {
+          const pdfPath = join(outDir, `${baseName}.pdf`);
+          writeFileSync(pdfPath, result.pdf);
+          console.error(`Generated: ${pdfPath}`);
+        }
+
+        if (formats.includes('drawio') && result.drawio) {
+          const drawioPath = join(outDir, `${baseName}.drawio`);
+          writeFileSync(drawioPath, result.drawio);
+          console.error(`Generated: ${drawioPath}`);
+        }
+
+        if (formats.includes('excalidraw') && result.excalidraw) {
+          const excalidrawPath = join(outDir, `${baseName}.excalidraw`);
+          writeFileSync(excalidrawPath, result.excalidraw);
+          console.error(`Generated: ${excalidrawPath}`);
+        }
+
+        if (formats.includes('json') && result.json) {
+          const jsonPath = join(outDir, `${baseName}.json`);
+          writeFileSync(jsonPath, result.json);
+          console.error(`Generated: ${jsonPath}`);
         }
       }
     } catch (error) {

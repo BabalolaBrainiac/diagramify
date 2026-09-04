@@ -3,6 +3,11 @@ import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 import { generateInteractiveHTML } from './html.js';
 import { styleSVG } from './styling/renderer.js';
 import { flattenSVGColors } from './styling/flatten.js';
+import { svgToPDF } from './export/pdf.js';
+import { graphToDrawio, graphToExcalidraw } from './export/editable.js';
+import { mermaidToGraph } from './ir-mermaid.js';
+import { attachLayout } from './ir-layout.js';
+import { serializeGraph, type ArchitectureGraph } from './ir.js';
 import { getTheme } from './styling/themes.js';
 import type { DiagramifyResult, OutputFormat, RenderOptions, DiagramType } from './types.js';
 
@@ -167,7 +172,18 @@ export async function renderDiagram(
     options.backgroundColor,
   );
 
-  if (formats.includes('svg') || formats.includes('png') || formats.includes('jpeg') || formats.includes('html')) {
+  const needsSVG =
+    formats.includes('svg') ||
+    formats.includes('png') ||
+    formats.includes('jpeg') ||
+    formats.includes('html') ||
+    formats.includes('pdf');
+  const needsGraph =
+    formats.includes('drawio') || formats.includes('excalidraw') || formats.includes('json');
+
+  let layoutSVG: string | undefined;
+
+  if (needsSVG || needsGraph) {
     try {
       const rawSVG = renderMermaidSVG(mermaidSource);
       const baseSVG = applyThemeVars(rawSVG, options.theme, options.darkMode ?? false);
@@ -181,13 +197,19 @@ export async function renderDiagram(
         }
       }
 
-      if (formats.includes('svg') || formats.includes('png') || formats.includes('jpeg')) {
-        result.svg = renderSVG(
+      // An editable export needs the geometry the layout engine produced, so
+      // the SVG is rendered even when the caller did not ask for the file.
+      const wantsSVGFile = formats.some((f) => f === 'svg' || f === 'png' || f === 'jpeg' || f === 'pdf');
+      if (wantsSVGFile || needsGraph) {
+        layoutSVG = renderSVG(
           mermaidSource,
           options.theme,
           options.darkMode ?? false,
           options.backgroundColor,
         );
+        if (wantsSVGFile) {
+          result.svg = layoutSVG;
+        }
       }
     } catch (error) {
       throw new Error(`SVG rendering failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -216,6 +238,40 @@ export async function renderDiagram(
       throw new Error(
         `JPEG rasterization failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  if (formats.includes('pdf')) {
+    if (!layoutSVG) {
+      layoutSVG = renderSVG(mermaidSource, options.theme, options.darkMode ?? false, options.backgroundColor);
+    }
+    try {
+      result.pdf = svgToPDF(layoutSVG, {
+        title: options.title,
+        background: rasterBackground,
+      });
+    } catch (error) {
+      throw new Error(`PDF export failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (needsGraph) {
+    // The graph carries geometry when a render already produced an SVG, so an
+    // editable export keeps the layout the reader saw.
+    let graph: ArchitectureGraph = options.graph ?? mermaidToGraph(mermaidSource, options.title);
+    if (layoutSVG) {
+      graph = attachLayout(graph, layoutSVG);
+    }
+    result.graph = graph;
+
+    if (formats.includes('drawio')) {
+      result.drawio = graphToDrawio(graph);
+    }
+    if (formats.includes('excalidraw')) {
+      result.excalidraw = graphToExcalidraw(graph);
+    }
+    if (formats.includes('json')) {
+      result.json = serializeGraph(graph);
     }
   }
 

@@ -53,12 +53,13 @@ describe('Edge Cases and Error Handling', () => {
       expect(parseMermaidSource('flowchart RL\nA[A]').direction).toBe('RL');
     });
 
-    it('handles empty labels', () => {
+    it('falls back to the identifier when a label is empty', () => {
       const source = `flowchart TD
         A[]`;
       const result = parseMermaidSource(source);
       expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].label).toBe('');
+      // An empty label draws an empty box, which tells a reader nothing.
+      expect(result.nodes[0].label).toBe('A');
     });
 
     it('handles self-referencing edges', () => {

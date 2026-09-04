@@ -162,19 +162,14 @@ describe('raster output fidelity', () => {
 });
 
 describe('HTML viewer supply chain', () => {
-  it('pins every CDN script to an exact version with an integrity hash', async () => {
+  it('loads no third-party script at all', async () => {
     const result = await renderDiagram(SOURCE, ['html'], { theme: 'light' });
     const html = result.html as string;
 
-    const scriptUrls = html.match(/https:\/\/unpkg\.com\/[^"']+/g) ?? [];
-    expect(scriptUrls.length).toBeGreaterThan(0);
-
-    for (const url of scriptUrls) {
-      // An unpinned URL lets the host change code in an already shared diagram.
-      expect(url, `${url} is not pinned to a version`).toMatch(/@\d+\.\d+\.\d+\//);
-    }
-
-    const integrityHashes = html.match(/sha384-[A-Za-z0-9+/=]+/g) ?? [];
-    expect(integrityHashes.length).toBe(scriptUrls.length);
+    // The viewer used to pull pan-zoom and a raster library from a CDN. The
+    // host could then change the code inside a diagram already shared, and the
+    // file broke with no network. Both are now built in.
+    expect(html.match(/<script[^>]+src=/g) ?? []).toEqual([]);
+    expect(html).not.toContain('unpkg.com');
   });
 });

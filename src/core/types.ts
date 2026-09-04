@@ -1,3 +1,5 @@
+import type { ArchitectureGraph } from './ir.js';
+
 export type DiagramType =
   | 'flowchart'
   | 'sequence'
@@ -7,7 +9,16 @@ export type DiagramType =
   | 'xychart'
   | 'auto';
 
-export type OutputFormat = 'svg' | 'png' | 'jpeg' | 'html' | 'mmd';
+export type OutputFormat =
+  | 'svg'
+  | 'png'
+  | 'jpeg'
+  | 'html'
+  | 'mmd'
+  | 'pdf'
+  | 'drawio'
+  | 'excalidraw'
+  | 'json';
 
 export type ProviderName = 'anthropic' | 'openai' | 'google';
 
@@ -19,10 +30,12 @@ export interface DiagramifyConfig {
   darkMode?: boolean;
   /** Background color for SVG and raster output. Use `transparent` to keep the alpha channel. */
   backgroundColor?: string;
+  /** Make the HTML viewer self-contained. It then issues no network request. */
+  offlineMode?: boolean;
   defaultOutput?: OutputFormat[];
   temperature?: number;
   maxTokens?: number;
-  direction?: 'LR' | 'TD' | 'TB' | 'RL';
+  direction?: 'LR' | 'TD' | 'TB' | 'RL' | 'BT';
 }
 
 export interface GenerateOptions {
@@ -32,10 +45,18 @@ export interface GenerateOptions {
   diagramType?: DiagramType;
   extraContext?: string;
   config?: Partial<DiagramifyConfig>;
+  /** Build the graph from the codebase alone. No provider and no network. */
+  noLLM?: boolean;
 }
 
 export interface RenderOptions {
   theme?: string;
+  /** Make the HTML viewer self-contained. It then issues no network request. */
+  offlineMode?: boolean;
+  /** Shown as the document title, and used by the PDF and editable exports. */
+  title?: string;
+  /** Reuse an existing graph instead of parsing the Mermaid source again. */
+  graph?: ArchitectureGraph;
   width?: number;
   height?: number;
   backgroundColor?: string;
@@ -54,10 +75,17 @@ export interface HTMLGenerationOptions extends RenderOptions {
 
 export interface DiagramifyResult {
   mermaid: string;
+  /** The typed graph the diagram came from. Every exporter reads this. */
+  graph?: ArchitectureGraph;
   svg?: string;
   png?: Buffer;
   jpeg?: Buffer;
   html?: string;
+  pdf?: Buffer;
+  drawio?: string;
+  excalidraw?: string;
+  /** The IR as stable JSON. The CI drift gate compares this. */
+  json?: string;
   diagramType: DiagramType;
   tokensUsed?: number;
 }

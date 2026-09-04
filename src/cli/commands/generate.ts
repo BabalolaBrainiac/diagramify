@@ -4,7 +4,9 @@ import { join, resolve } from 'path';
 import { generateDiagram } from '../../core/generate.js';
 import type { GenerateOptions, OutputFormat, DiagramType } from '../../core/types.js';
 
-const VALID_OUTPUT_FORMATS = new Set<OutputFormat>(['svg', 'png', 'jpeg', 'html', 'mmd']);
+const VALID_OUTPUT_FORMATS = new Set<OutputFormat>([
+  'svg', 'png', 'jpeg', 'html', 'mmd', 'pdf', 'drawio', 'excalidraw', 'json',
+]);
 
 function parseOutputFormats(value: string | undefined, defaults: OutputFormat[]): OutputFormat[] {
   const formats = value
@@ -32,7 +34,10 @@ export const generateCommand = new Command()
     'Diagram type: flowchart|sequence|class|er|state|auto (default: auto)',
     'auto',
   )
-  .option('--out <formats>', 'Comma-separated output formats: svg,png,jpeg,html,mmd (default: svg,html,mmd)')
+  .option(
+    '--out <formats>',
+    'Output formats: svg,png,jpeg,html,mmd,pdf,drawio,excalidraw,json (default: svg,html,mmd)',
+  )
   .option('--outdir <dir>', 'Output directory (default: current directory)')
   .option('--name <name>', 'Base filename for outputs (default: diagram)')
   .option('--theme <theme>', 'Diagram theme name')
@@ -43,6 +48,11 @@ export const generateCommand = new Command()
   .option('--direction <dir>', 'Flow direction: LR, TD, TB, RL (default: LR)')
   .option('--stdout', 'Print Mermaid source to stdout instead of writing files')
   .option('--json', 'Output result as JSON with base64-encoded images')
+  .option(
+    '--no-llm',
+    'Build the diagram from the codebase alone. No provider, no network, no API key.',
+  )
+  .option('--offline', 'Same as --no-llm, and the HTML viewer makes no network request')
   .action(async (options) => {
     try {
       const codebasePath = options.path ? resolve(options.path) : process.cwd();
@@ -56,12 +66,14 @@ export const generateCommand = new Command()
         path: options.description ? undefined : codebasePath,
         description: options.description,
         diagramType: options.type as DiagramType,
+        noLLM: options.llm === false || options.offline === true,
         config: {
           provider: options.provider,
           model: options.model,
           theme: options.theme,
           darkMode: options.dark ?? false,
           backgroundColor: options.background,
+          offlineMode: options.offline === true,
           defaultOutput: formats,
           direction: options.direction as any,
         },
@@ -115,7 +127,32 @@ export const generateCommand = new Command()
           console.error(`Generated: ${htmlPath}`);
         }
 
-        console.error(`\nTokens used: ${result.tokensUsed}`);
+        if (formats.includes('pdf') && result.pdf) {
+          const pdfPath = join(outDir, `${baseName}.pdf`);
+          writeFileSync(pdfPath, result.pdf);
+          console.error(`Generated: ${pdfPath}`);
+        }
+
+        if (formats.includes('drawio') && result.drawio) {
+          const drawioPath = join(outDir, `${baseName}.drawio`);
+          writeFileSync(drawioPath, result.drawio);
+          console.error(`Generated: ${drawioPath}`);
+        }
+
+        if (formats.includes('excalidraw') && result.excalidraw) {
+          const excalidrawPath = join(outDir, `${baseName}.excalidraw`);
+          writeFileSync(excalidrawPath, result.excalidraw);
+          console.error(`Generated: ${excalidrawPath}`);
+        }
+
+        if (formats.includes('json') && result.json) {
+          const jsonPath = join(outDir, `${baseName}.json`);
+          writeFileSync(jsonPath, result.json);
+          console.error(`Generated: ${jsonPath}`);
+        }
+
+        const nodeCount = result.graph?.nodes.length ?? 0;
+        console.error(`\n${nodeCount} services mapped. Tokens used: ${result.tokensUsed}`);
       }
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));

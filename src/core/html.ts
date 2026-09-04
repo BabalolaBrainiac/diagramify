@@ -118,9 +118,9 @@ function getServiceInfo(label: string): ServiceInfo {
   return { type: 'other', color: '#94a3b8', bgColor: '#f5f5f5' };
 }
 
-function renderNodeCard(node: LayoutNode): string {
+function renderNodeCard(node: LayoutNode, offline = false): string {
   const info = getServiceInfo(node.label);
-  const iconURL = getIconURL(info.slug || node.label.toLowerCase(), info.color);
+  const iconURL = getIconURL(info.slug || node.label.toLowerCase(), info.color, offline);
   const fallback = getFallbackSVG(node.label, info.color).replace(/\n\s*/g, ' ');
   const iconHTML = iconURL
     ? `<img src="${iconURL}" alt="" data-fallback="${escapeHTML(fallback)}">`
@@ -181,8 +181,16 @@ export function generateInteractiveHTML(
 
   const layout = extractFromSVG(svgContent);
 
+  // Offline mode must make no network request. The system font stack replaces
+  // the web font, and every script is already inline.
+  const fontImport = options.offlineMode
+    ? '    /* Offline: system fonts only. The page makes no network request. */'
+    : "    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');";
+
   const subgraphsHTML = layout.subgraphs.map(renderSubgraph).join('\n');
-  const nodeCardsHTML = layout.nodes.map(renderNodeCard).join('\n');
+  const nodeCardsHTML = layout.nodes
+    .map((node) => renderNodeCard(node, options.offlineMode === true))
+    .join('\n');
 
   const canvasW = layout.viewBox.w + 40;
   const canvasH = layout.viewBox.h + 40;
@@ -197,14 +205,8 @@ export function generateInteractiveHTML(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHTML(title)}</title>
-  <!-- Pinned version plus a subresource integrity hash. An unpinned CDN script
-       lets the host change the code in every diagram that was already shared. -->
-  <script src="https://unpkg.com/@panzoom/panzoom@4.6.2/dist/panzoom.min.js"
-          integrity="sha384-irdz3GZoyr9anVd5nSLy63Z39tLtMTNQFFKxhx/KM08C8NkKpZre6M/m4QCUeeB3"
-          crossorigin="anonymous"
-          referrerpolicy="no-referrer"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+${fontImport}
     :root {
       --bg:#f8fafc; --surface:#ffffff; --text:#0f172a; --text-muted:#64748b;
       --edge-color:#94a3b8; --edge-color-active:#3b82f6;
@@ -455,6 +457,22 @@ export function generateInteractiveHTML(
       <span>Drag cards · click label in edit mode</span>
     </div>
   </div>
+  <!-- The panels must precede the script. The script looks them up on the
+       first pass, and a lookup before the markup exists returns null, which
+       silently disables the minimap and the node detail panel. -->
+  ${options.showNodeDetail !== false ? `
+  <div id="dfy-detail" class="dfy-detail-panel">
+    <button id="dfy-detail-close">&times;</button>
+    <div id="dfy-detail-content"></div>
+  </div>
+  ` : ''}
+  ${options.showMinimap !== false ? `
+  <div id="dfy-minimap" class="dfy-minimap">
+    <canvas id="dfy-minimap-canvas" width="160" height="120"></canvas>
+    <div id="dfy-minimap-viewport" class="dfy-minimap-viewport"></div>
+  </div>
+  ` : ''}
+
   <script>
     const NODES = ${serializeForScript(NODE_DATA)};
     const EDGES = ${serializeForScript(EDGE_DATA)};
@@ -465,17 +483,95 @@ export function generateInteractiveHTML(
     const edgesGroup = document.getElementById('edges-group');
     const cardMap = {};
     
-    // Panzoom init
+    // Built-in pan and zoom.
+    // The viewer used to load this from a CDN. A saved diagram then broke
+    // without a network, and the host could change the code in a file that was
+    // already shared. The surface below is everything the viewer calls.
     const canvasWrap = document.getElementById('canvas-wrap');
-    let pz;
-    if (window.Panzoom) {
-      pz = window.Panzoom(canvas, {
-        maxScale: 3,
-        minScale: 0.1,
-        canvas: true
+
+    function createPanzoom(el, opts) {
+      const minScale = opts.minScale ?? 0.1;
+      const maxScale = opts.maxScale ?? 3;
+      let scale = 1, panX = 0, panY = 0, disablePan = false;
+      let pointerId = null, startX = 0, startY = 0, startPanX = 0, startPanY = 0;
+
+      function apply() {
+        el.style.transform =
+          'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
+        el.dispatchEvent(new CustomEvent('panzoomchange', {
+          detail: { x: panX, y: panY, scale: scale },
+        }));
+      }
+
+      function clamp(value) {
+        return Math.min(maxScale, Math.max(minScale, value));
+      }
+
+      el.style.transformOrigin = '0 0';
+      el.style.willChange = 'transform';
+
+      const api = {
+        getScale: () => scale,
+        getPan: () => ({ x: panX, y: panY }),
+        setOptions: (next) => {
+          if (next && typeof next.disablePan === 'boolean') disablePan = next.disablePan;
+        },
+        pan: (x, y) => { panX = x; panY = y; apply(); },
+        zoom: (value) => { scale = clamp(value); apply(); },
+        reset: () => { scale = 1; panX = 0; panY = 0; apply(); },
+        // Zoom toward the cursor, so the point under it stays put.
+        zoomToPoint: (value, clientX, clientY) => {
+          const rect = canvasWrap.getBoundingClientRect();
+          const px = clientX - rect.left;
+          const py = clientY - rect.top;
+          const next = clamp(value);
+          const ratio = next / scale;
+          panX = px - (px - panX) * ratio;
+          panY = py - (py - panY) * ratio;
+          scale = next;
+          apply();
+        },
+        zoomWithWheel: (event) => {
+          event.preventDefault();
+          // A trackpad reports small deltas. Scale the step by the distance.
+          const step = Math.exp(-event.deltaY * 0.0015);
+          api.zoomToPoint(scale * step, event.clientX, event.clientY);
+        },
+      };
+
+      canvasWrap.addEventListener('pointerdown', (event) => {
+        if (disablePan || event.button !== 0) return;
+        // Let a card handle its own drag.
+        if (event.target.closest('.dfy-node, .dfy-subgraph, .edge-hit')) return;
+        pointerId = event.pointerId;
+        startX = event.clientX; startY = event.clientY;
+        startPanX = panX; startPanY = panY;
+        canvasWrap.setPointerCapture(pointerId);
+        canvasWrap.style.cursor = 'grabbing';
       });
-      canvasWrap.addEventListener('wheel', pz.zoomWithWheel);
+
+      canvasWrap.addEventListener('pointermove', (event) => {
+        if (pointerId === null || event.pointerId !== pointerId) return;
+        panX = startPanX + (event.clientX - startX);
+        panY = startPanY + (event.clientY - startY);
+        apply();
+      });
+
+      function endPan(event) {
+        if (pointerId === null || event.pointerId !== pointerId) return;
+        try { canvasWrap.releasePointerCapture(pointerId); } catch (_) {}
+        pointerId = null;
+        canvasWrap.style.cursor = '';
+      }
+      canvasWrap.addEventListener('pointerup', endPan);
+      canvasWrap.addEventListener('pointercancel', endPan);
+
+      apply();
+      return api;
     }
+
+    const pz = createPanzoom(canvas, { minScale: 0.1, maxScale: 3 });
+    canvasWrap.addEventListener('wheel', pz.zoomWithWheel, { passive: false });
 
     // Fit-to-content: after first render, scale + pan so all nodes are visible
     function fitToContent() {
@@ -496,7 +592,10 @@ export function generateInteractiveHTML(
       const maxX = Math.max(...xe), maxY = Math.max(...ye);
       const contentW = maxX - minX + 60;
       const contentH = maxY - minY + 60;
-      const scale = Math.min(vpW / contentW, vpH / contentH, 1) * 0.92;
+      // Fill the canvas. The old cap of 1 left a small diagram stranded in a
+      // large empty area. The upper bound stops a two-node diagram becoming huge.
+      const MAX_FIT_SCALE = 1.75;
+      const scale = Math.min(vpW / contentW, vpH / contentH, MAX_FIT_SCALE) * 0.92;
       const panX = (vpW / 2) - (minX + contentW / 2) * scale;
       const panY = (vpH / 2) - (minY + contentH / 2) * scale;
       pz.zoom(scale, { animate: false });
@@ -1124,39 +1223,149 @@ export function generateInteractiveHTML(
       a.href = url; a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-    function loadHtml2Canvas() {
-      return new Promise((resolve, reject) => {
-        if (window.html2canvas) return resolve(window.html2canvas);
-        const s = document.createElement('script');
-        s.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
-        s.integrity = 'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H';
-        s.crossOrigin = 'anonymous';
-        s.referrerPolicy = 'no-referrer';
-        s.onload = () => resolve(window.html2canvas);
-        s.onerror = reject;
-        document.head.appendChild(s);
+    // Builds a real SVG from the live card positions.
+    //
+    // The old export wrapped each card in an embedded HTML object, which only
+    // a browser can draw. Illustrator, Figma, Inkscape, and every rasterizer
+    // showed an empty box. These are true rect and text shapes instead, so the
+    // file opens anywhere, and the raster export below can use it too.
+    function buildExportSVG() {
+      const style = getComputedStyle(document.body);
+      const surface = style.getPropertyValue('--surface').trim() || '#ffffff';
+      const bg = style.getPropertyValue('--bg').trim() || '#ffffff';
+      const textColor = style.getPropertyValue('--text').trim() || '#0f172a';
+      const edgeColor = style.getPropertyValue('--edge-color').trim() || '#94a3b8';
+
+      const cards = Array.from(document.querySelectorAll('.dfy-node'));
+      const groups = Array.from(document.querySelectorAll('.dfy-subgraph'));
+
+      // Measure the drawing, so nothing is cropped whatever the user moved.
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const boxes = [];
+
+      groups.forEach(group => {
+        const x = parseFloat(group.style.left) || 0;
+        const y = parseFloat(group.style.top) || 0;
+        const w = group.offsetWidth, h = group.offsetHeight;
+        boxes.push({ kind: 'group', x, y, w, h, label: (group.dataset.label || '').trim() });
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
       });
+
+      cards.forEach(card => {
+        const cx = parseFloat(card.dataset.cx), cy = parseFloat(card.dataset.cy);
+        const w = card.offsetWidth, h = card.offsetHeight;
+        const x = cx - w / 2, y = cy - h / 2;
+        const brand = getComputedStyle(card).getPropertyValue('--brand').trim() || '#94a3b8';
+        boxes.push({ kind: 'node', x, y, w, h, label: card.dataset.label || '', brand });
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+      });
+
+      if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 800; maxY = 600; }
+
+      const pad = 32;
+      minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+      const width = Math.max(1, maxX - minX);
+      const height = Math.max(1, maxY - minY);
+
+      function esc(value) {
+        return String(value)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      const parts = [];
+      parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.round(width) +
+        '" height="' + Math.round(height) + '" viewBox="' + minX + ' ' + minY + ' ' +
+        width + ' ' + height + '">');
+      parts.push('<rect x="' + minX + '" y="' + minY + '" width="' + width +
+        '" height="' + height + '" fill="' + esc(bg) + '"/>');
+
+      // Groups sit behind the edges and the cards.
+      boxes.filter(b => b.kind === 'group').forEach(b => {
+        parts.push('<rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h +
+          '" rx="8" fill="none" stroke="' + esc(edgeColor) + '" stroke-width="1" stroke-dasharray="4 4"/>');
+        if (b.label) {
+          parts.push('<text x="' + (b.x + 10) + '" y="' + (b.y + 16) +
+            '" font-family="Inter, system-ui, sans-serif" font-size="11" fill="' +
+            esc(edgeColor) + '">' + esc(b.label) + '</text>');
+        }
+      });
+
+      // Edges come straight from the live SVG, which already holds real paths.
+      const liveEdges = document.getElementById('edges');
+      if (liveEdges) {
+        Array.from(liveEdges.querySelectorAll('polyline.edge-path, path.edge-path, line.edge-path'))
+          .forEach(el => {
+            const clone = el.cloneNode(true);
+            clone.removeAttribute('class');
+            const stroke = getComputedStyle(el).stroke;
+            if (stroke && stroke !== 'none') clone.setAttribute('stroke', stroke);
+            clone.setAttribute('fill', 'none');
+            parts.push(clone.outerHTML);
+          });
+        Array.from(liveEdges.querySelectorAll('text')).forEach(el => {
+          const clone = el.cloneNode(true);
+          clone.setAttribute('fill', getComputedStyle(el).fill || textColor);
+          parts.push(clone.outerHTML);
+        });
+        const markers = liveEdges.querySelector('defs');
+        if (markers) parts.push(markers.outerHTML);
+      }
+
+      // Cards as a rectangle plus centred label text.
+      boxes.filter(b => b.kind === 'node').forEach(b => {
+        parts.push('<rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h +
+          '" rx="6" fill="' + esc(surface) + '" stroke="' + esc(b.brand) + '" stroke-width="1"/>');
+        parts.push('<rect x="' + b.x + '" y="' + b.y + '" width="3" height="' + b.h +
+          '" fill="' + esc(b.brand) + '"/>');
+        parts.push('<text x="' + (b.x + b.w / 2) + '" y="' + (b.y + b.h / 2) +
+          '" text-anchor="middle" dominant-baseline="central" ' +
+          'font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="' +
+          esc(textColor) + '">' + esc(b.label) + '</text>');
+      });
+
+      parts.push('</svg>');
+      return { svg: parts.join(''), width: Math.round(width), height: Math.round(height) };
     }
+
     async function exportRaster(format) {
-      const h2c = await loadHtml2Canvas();
-      const target = canvas;
-      const c = await h2c(target, { scale: 4, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor });
-      const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-      c.toBlob(blob => download(TITLE_SAFE + '.' + format, blob, mime), mime, 0.92);
+      // Draw the exported SVG onto a canvas. No library, and no network.
+      const built = buildExportSVG();
+      const scale = 3;
+      const blob = new Blob([built.svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+
+      try {
+        const image = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('The diagram could not be drawn.'));
+          img.src = url;
+        });
+
+        const surface = document.createElement('canvas');
+        surface.width = built.width * scale;
+        surface.height = built.height * scale;
+        const ctx = surface.getContext('2d');
+
+        // JPEG holds no alpha channel, so paint the page background first.
+        ctx.fillStyle = getComputedStyle(document.body).backgroundColor || '#ffffff';
+        ctx.fillRect(0, 0, surface.width, surface.height);
+        ctx.drawImage(image, 0, 0, surface.width, surface.height);
+
+        const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        surface.toBlob(out => {
+          if (out) download(TITLE_SAFE + '.' + format, out, mime);
+        }, mime, 0.92);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
     }
+
     function exportSVG() {
-      const w = canvas.offsetWidth, h = canvas.offsetHeight;
-      const cardSvg = Array.from(document.querySelectorAll('.dfy-node')).map(card => {
-        const x = parseFloat(card.style.left), y = parseFloat(card.style.top);
-        const cw = card.offsetWidth, ch = card.offsetHeight;
-        const html = card.outerHTML;
-        return '<foreignObject x="' + x + '" y="' + y + '" width="' + cw + '" height="' + ch + '">' +
-               '<div xmlns="http://www.w3.org/1999/xhtml">' + html + '</div></foreignObject>';
-      }).join('');
-      const edgesHTML = document.getElementById('edges').outerHTML;
-      const out = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-        edgesHTML + cardSvg + '</svg>';
-      download(TITLE_SAFE + '.svg', out, 'image/svg+xml');
+      download(TITLE_SAFE + '.svg', buildExportSVG().svg, 'image/svg+xml');
     }
     document.getElementById('format-select').addEventListener('change', async e => {
       const fmt = e.target.value;
@@ -1400,19 +1609,6 @@ export function generateInteractiveHTML(
       else if (k === 'r') document.getElementById('reset-btn').click();
     });
   </script>
-
-  ${options.showNodeDetail !== false ? `
-  <div id="dfy-detail" class="dfy-detail-panel">
-    <button id="dfy-detail-close">&times;</button>
-    <div id="dfy-detail-content"></div>
-  </div>
-  ` : ''}
-  ${options.showMinimap !== false ? `
-  <div id="dfy-minimap" class="dfy-minimap">
-    <canvas id="dfy-minimap-canvas" width="160" height="120"></canvas>
-    <div id="dfy-minimap-viewport" class="dfy-minimap-viewport"></div>
-  </div>
-  ` : ''}
 
 </body>
 </html>`;
