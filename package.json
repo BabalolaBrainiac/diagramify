@@ -1,7 +1,7 @@
 {
   "name": "diagramify-ai",
-  "version": "0.2.1",
-  "description": "Open-source AI-powered Mermaid diagram generator with interactive HTML, SVG, PNG, CLI, React, and agent skill support.",
+  "version": "0.3.0",
+  "description": "Open-source architecture mapping and rendering engine with interactive HTML, images, PDF, CLI, React, and agent support.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,6 +30,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "build:icons": "node scripts/build-icons.mjs",
     "dev": "tsup --watch",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run audit:prod",

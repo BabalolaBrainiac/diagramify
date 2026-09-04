@@ -101,12 +101,60 @@ describe('Phase 1: Interactive HTML Generation', () => {
     expect(html).toContain('legend-item');
   });
 
+  it('keeps dark brand icons visible in dark themes', () => {
+    const kindeSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+      <g class="node" data-id="kinde" data-label="Kinde"><rect x="50" y="30" width="100" height="40"/></g>
+    </svg>`;
+    const html = generateInteractiveHTML(kindeSVG, mermaidSource);
+
+    expect(html).toContain('dfy-icon-needs-contrast');
+    expect(html).toContain('filter:brightness(0) invert(1)');
+  });
+
   it('includes export controls', () => {
     const html = generateInteractiveHTML(testSVG, mermaidSource);
     expect(html).toContain('id="format-select"');
     expect(html).toContain('html');
     expect(html).toContain('svg');
     expect(html).toContain('mmd');
+  });
+
+  it('offers light and dark image and PDF exports', () => {
+    const html = generateInteractiveHTML(testSVG, mermaidSource);
+
+    for (const format of ['png', 'jpeg', 'svg', 'pdf']) {
+      expect(html).toContain(`value="${format}:light"`);
+      expect(html).toContain(`value="${format}:dark"`);
+    }
+    expect(html).toContain("theme ? '-' + theme : ''");
+  });
+
+  it('keeps a complete edge label above its line', () => {
+    const edgeSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+      <g class="node" data-id="api" data-label="API"><rect x="20" y="100" width="80" height="40"/></g>
+      <g class="node" data-id="db" data-label="Database"><rect x="300" y="100" width="80" height="40"/></g>
+      <polyline class="edge" data-from="api" data-to="db" data-style="solid" data-label="SQL LISTEN/NOTIFY event payload" />
+    </svg>`;
+    const html = generateInteractiveHTML(edgeSVG, mermaidSource);
+
+    expect(html).toContain('SQL LISTEN/NOTIFY event payload');
+    expect(html).not.toContain('SQL LISTEN/NOTIFY...');
+    expect(html).toContain('function labelAnchor');
+    expect(html).toContain('function separateLabel');
+    expect(html).toContain('const placedLabels = []');
+    expect(html).toContain('edge-label-secondary');
+    expect(html).toContain('/^(uses|routes)$/i');
+    expect(html).toContain('paint-order:stroke fill');
+  });
+
+  it('keeps hidden connections stable after edge redraws', () => {
+    const html = generateInteractiveHTML(testSVG, mermaidSource);
+
+    expect(html).toContain('id="hide-btn"');
+    expect(html).toContain('hideButton.disabled = !el');
+    expect(html).toContain("filter(element => !element.dataset.dfyHidden &&");
+    expect(html).toContain('data-edge-key');
+    expect(html).toContain('hiddenEdgeKeys.has');
   });
 
   it('includes theme toggle button', () => {

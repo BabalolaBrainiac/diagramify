@@ -12,8 +12,8 @@ import { modelsCommand } from './commands/models.js';
 
 program
   .name('diagramify')
-  .description('AI-powered Mermaid diagram generator')
-  .version('0.2.1');
+  .description('Architecture mapping and rendering engine')
+  .version('0.3.0');
 
 program.addCommand(generateCommand);
 program.addCommand(renderCommand);

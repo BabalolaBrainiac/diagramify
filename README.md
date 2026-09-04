@@ -4,17 +4,19 @@
 [![CI](https://github.com/BabalolaBrainiac/diagramify/actions/workflows/ci.yml/badge.svg)](https://github.com/BabalolaBrainiac/diagramify/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Open-source AI-powered Mermaid diagram generator. Analyze a codebase or describe your system → get interactive architecture diagrams in seconds.
+> Open-source architecture mapping and rendering engine. Analyze a codebase or describe a system, then get a detailed architecture diagram.
 
-Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three surfaces: **CLI**, **npm library**, and a **Claude Code skill**. LLM-agnostic via the Vercel AI SDK (Anthropic / OpenAI / Google). Pure TypeScript rendering via `beautiful-mermaid` — no headless browser, no Chromium.
+Diagramify owns the architecture graph and rendering pipeline. It exports interactive HTML, images, PDF, editable files, JSON, and Mermaid source.
+
+The package provides a CLI, an npm library, and an agent skill. Optional model support includes Anthropic, OpenAI, and Google.
 
 ---
 
 ## Features
 
-- **Codebase analysis** — automatically map your project's structure, frameworks, services, and inter-module dependencies
-- **Natural language input** — describe your system; the LLM produces valid Mermaid syntax
-- **Interactive HTML output** — drag nodes, pan/zoom, edit labels, click edges to highlight connections, search, theme switcher, minimap, undo/redo, snap-to-grid, export
+- **Deep codebase analysis** — map nested systems, modules, endpoints, imports, service calls, and deployment evidence
+- **Natural language input** — describe your system; a model refines the typed architecture graph
+- **Interactive HTML output** — move, edit, search, filter, hide, restore, inspect, and export diagram elements
 - **Fit-to-content on load** — large diagrams auto-scale to fill the viewport on open
 - **Orthogonal edge routing** — edges draw as clean L/Z-shaped paths with rounded corners, not long diagonal arcs
 - **Works with no LLM at all** — `--no-llm` builds the diagram from the codebase alone. No API key, no network, no cost
@@ -23,6 +25,7 @@ Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three
 - **Vector PDF** — real shapes and selectable text, not a picture. No dependency and no headless browser
 - **Editable handoff** — `drawio` and `excalidraw` exports keep the layout, so a reviewer can correct the diagram in a tool they already run
 - **Drift gate** — `diagramify check` fails a pull request when the diagram no longer matches the code, and names the services that changed
+- **Theme-aware exports** — export PNG, JPEG, SVG, and PDF in light or dark mode from the viewer
 - **Fully offline viewer** — `--offline` produces one HTML file that makes no network request
 - **Diagram diffing** — `diagramify diff` compares two `.mmd` files and highlights changes
 - **CI integration** — `diagramify ci` generates GitHub Actions / GitLab CI workflows
@@ -31,6 +34,20 @@ Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three
 - **LLM-agnostic** — Claude, OpenAI, or Google Gemini, through schema-constrained output
 - **React component** — embed the interactive viewer in any React app
 - **No browser required** — pure TypeScript rendering, no Puppeteer
+
+---
+
+## Icon system
+
+Diagramify uses one fixed icon order:
+
+1. Use an exact bundled product icon.
+2. Use the matching cloud platform icon.
+3. Use a semantic icon for modules, APIs, workers, and authentication.
+4. Use generated initials only when no other icon applies.
+
+Aliases ignore case, spaces, dots, and hyphens. For example, `AWS S3` maps to Amazon S3.
+The viewer embeds each icon in the HTML file. It does not request icons from a network.
 
 ---
 
@@ -153,7 +170,7 @@ diagramify generate --provider openai --model gpt-4o
 diagramify generate --provider google --model gemini-flash-latest --out html,svg,png,mmd
 ```
 
-> **Tip — Gemini on large codebases:** If output is truncated, ensure you are using a non-thinking model variant (e.g. `gemini-flash-latest` rather than `gemini-2.5-flash`). Diagramify automatically sets `thinkingBudget: 0` and `maxTokens: 8192` for Google models to maximise output token budget for Mermaid syntax.
+> **Tip — Gemini on large codebases:** Use a non-thinking model when output is incomplete. Diagramify reserves the output budget for the architecture graph.
 
 ---
 
@@ -167,7 +184,7 @@ diagramify render <input.mmd> [options]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--out <formats>` | `svg,html` | `html,svg,png,jpeg,mmd` |
+| `--out <formats>` | `svg,html` | `html,svg,png,jpeg,mmd,pdf,drawio,excalidraw,json` |
 | `--outdir <dir>` | input file dir | Output directory |
 | `--name <name>` | `diagram` | Output filename |
 | `--theme <name>` | `light` | `light`, `dark`, `tokyo-night`, `nord`, `catppuccin` |
@@ -214,7 +231,8 @@ Keyboard shortcuts in the interactive HTML viewer:
 | `T` | Cycle themes (light → dark → Tokyo Night → Nord → Catppuccin) |
 | `E` | Toggle edit mode (click any label to rename) |
 | `L` | Toggle legend / sidebar |
-| `H` | Toggle edge visibility |
+| `H` | Hide the selected node, group, or connection |
+| `Shift+H` | Restore all hidden elements |
 | `R` | Reset zoom and pan |
 | `G` | Toggle snap-to-grid |
 | `F` | Fullscreen |
@@ -223,8 +241,6 @@ Keyboard shortcuts in the interactive HTML viewer:
 | `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
 | `Ctrl+C` / `Ctrl+V` | Copy / paste node |
 | `Del` / `Backspace` | Delete selected node or edge |
-
----
 
 ### `diagramify watch`
 
@@ -498,7 +514,7 @@ export default function MyPage() {
 | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-flash-latest` |
 
-> **Google Gemini note:** Use `gemini-flash-latest` or `gemini-2.0-flash` for codebase generation. The older `gemini-1.5-*` model IDs are no longer available on the v1beta API. Diagramify disables thinking budget on all Google models to ensure the full token budget goes toward Mermaid output.
+> **Google Gemini note:** Diagramify disables thinking output. This keeps the complete output budget for the architecture graph.
 
 ---
 
@@ -512,6 +528,9 @@ diagramify/
 │   │   ├── config.ts      # Config file loading
 │   │   ├── provider.ts    # Vercel AI SDK abstraction
 │   │   ├── analyze.ts     # Codebase structure analysis
+│   │   ├── evidence.ts    # Deployment and environment evidence
+│   │   ├── ir.ts          # Typed architecture graph
+│   │   ├── ir-analyzer.ts # Offline graph construction
 │   │   ├── generate.ts    # LLM orchestration + validation
 │   │   ├── render.ts      # SVG / PNG / JPEG rendering
 │   │   ├── html.ts        # Interactive HTML overlay generator
@@ -529,13 +548,12 @@ diagramify/
 
 ## How it works
 
-1. **Analyze** — scan codebase structure (files, imports, frameworks, entry points) — or accept a text description
-2. **Prompt** — build a structured LLM prompt with context and diagram rules (intra-module wiring, no floating nodes)
-3. **Generate** — call Claude / OpenAI / Gemini to produce valid Mermaid syntax
-4. **Validate** — parse and verify output; retry up to 3× on failure
-5. **Render** — convert to SVG using `beautiful-mermaid` (pure TypeScript, no DOM)
-6. **Overlay** — optionally wrap SVG in interactive HTML with icons, drag-and-drop, themes, orthogonal edge routing
-7. **Rasterize** — optionally convert SVG to PNG / JPEG via `sharp`
+1. **Analyze** — scan files, imports, components, endpoints, deployment files, and service calls.
+2. **Build** — create a typed architecture graph from confirmed evidence.
+3. **Refine** — optionally let Claude, OpenAI, or Gemini improve the same graph.
+4. **Validate** — repair and validate the graph before rendering.
+5. **Render** — create SVG and preserve its layout in the graph.
+6. **Export** — create HTML, images, PDF, editable formats, Mermaid, or JSON.
 
 ---
 

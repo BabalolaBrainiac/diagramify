@@ -12,6 +12,7 @@ export type {
   RenderOptions,
   DiagramifyResult,
   AnalysisResult,
+  DetectedServiceLink,
   DiagramType,
   OutputFormat,
   ProviderName,
@@ -47,3 +48,6 @@ export { svgToPDF } from './core/export/pdf.js';
 export { graphToDrawio, graphToExcalidraw } from './core/export/editable.js';
 export { compareGraphs, formatDriftReport } from './core/drift.js';
 export type { DriftReport, EdgeChange, NodeChange } from './core/drift.js';
+
+export { collectEvidence, summarizeEvidence, environmentNames } from './core/evidence.js';
+export type { Evidence } from './core/evidence.js';

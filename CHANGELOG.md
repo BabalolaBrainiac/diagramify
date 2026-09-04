@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-04
+
 ### Added
 
 **The Architecture IR.** One typed graph now sits between analysis and output.
@@ -43,10 +45,26 @@ rewired, because it compares the graph and not an image.
 request at all. `offlineMode` was declared in the types before this and did
 nothing.
 
+**Deep architecture evidence.** The analyzer now scans nested deployment files,
+internal modules, endpoints, workers, jobs, imports, and service calls.
+
+- Direct service links keep their source component and connection type.
+- Nested Serverless systems now supply Lambda, storage, event, and workflow facts.
+- Earlybird analysis now includes Kinde and its confirmed endpoint links.
+
+**Viewer controls.** A user can hide a node, group, or connection without deleting it.
+The hidden item panel can restore one item or all items.
+
+**Theme exports.** The HTML viewer can export PNG, JPEG, SVG, and PDF in light or dark mode.
+
+**Bundled icons.** The package now includes its icon data and makes no icon network request.
+It uses exact product icons, platform icons, semantic icons, then initials.
+Dark brand icons gain contrast automatically on every dark theme.
+
 - `--background <color>` on `render` and `generate`. Use `transparent` to keep
   the alpha channel.
 - Regression coverage for the IR, drift, layout, all exporters, raster fidelity,
-  and the viewer. The suite went from 113 to 208 tests.
+  and the viewer. The suite went from 113 to 252 tests.
 
 **Provider and model discovery.** One key is now all a user supplies. The
 provider is chosen from whichever key is set, and the model is read from the
@@ -62,6 +80,11 @@ provider's own list rather than pinned in this package.
   stopping the run.
 
 ### Changed
+
+- Edge labels keep their full text. They sit above their lines and avoid other labels.
+- Repeated `uses` and `routes` labels appear on hover, which reduces default clutter.
+- The offline graph uses confirmed component links before it adds general service links.
+- The PDF receives the deeper graph and preserves its vector layout in both themes.
 
 - The viewer loads no third-party script. Pan and zoom, and the raster export,
   are now built in. Both used to come from a CDN.

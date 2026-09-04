@@ -107,6 +107,20 @@ export interface DetectedEndpoint {
   file: string;
 }
 
+export interface EvidenceItem {
+  service: string;
+  source: string;
+  hint: string;
+}
+
+export interface DetectedServiceLink {
+  from: string;
+  to: string;
+  label: string;
+  kind: 'sync' | 'async';
+  source: string;
+}
+
 export interface AnalysisResult {
   summary: string;
   entryPoints: string[];
@@ -121,4 +135,7 @@ export interface AnalysisResult {
   apiEndpoints: DetectedEndpoint[];
   serviceDirectories: string[];
   internalLinks?: Array<{from: string; to: string}>;
+  serviceLinks?: DetectedServiceLink[];
+  /** Components proved by an environment file, a container file, or infra code. */
+  evidence?: EvidenceItem[];
 }

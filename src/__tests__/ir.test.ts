@@ -346,6 +346,25 @@ describe('analyzer path, with no model', () => {
     expect(result.edges.some((e) => e.label === 'uses')).toBe(true);
   });
 
+  it('connects a service to the module that uses it', () => {
+    const result = analysisToGraph(
+      analysis({
+        serviceDirectories: ['orders module', 'payment module'],
+        detectedServices: ['Stripe'],
+        serviceLinks: [
+          { from: 'payment module', to: 'Stripe', label: 'API calls', kind: 'sync', source: 'src/payment/payment.service.ts' },
+        ],
+      }),
+      { title: 'shop' },
+    );
+
+    const payment = result.nodes.find((node) => node.label === 'Payment Module');
+    const stripe = result.nodes.find((node) => node.label === 'Stripe');
+    expect(result.edges).toContainEqual(
+      expect.objectContaining({ from: payment?.id, to: stripe?.id, label: 'API calls' }),
+    );
+  });
+
   it('marks a queue edge as async', () => {
     const result = analysisToGraph(
       analysis({

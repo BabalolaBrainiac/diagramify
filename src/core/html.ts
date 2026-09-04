@@ -115,7 +115,25 @@ function getServiceInfo(label: string): ServiceInfo {
       slug: def.simpleIconSlug || normalized,
     };
   }
+  if (/worker|job|consumer|scheduler/i.test(label)) {
+    return { type: 'compute', color: '#6366f1', bgColor: '#eef2ff', slug: normalized };
+  }
+  if (/endpoint|api|gateway/i.test(label)) {
+    return { type: 'middleware', color: '#0f766e', bgColor: '#f0fdfa', slug: normalized };
+  }
+  if (/module|service|component/i.test(label)) {
+    return { type: 'compute', color: '#475569', bgColor: '#f1f5f9', slug: normalized };
+  }
   return { type: 'other', color: '#94a3b8', bgColor: '#f5f5f5' };
+}
+
+function needsDarkThemeContrast(color: string): boolean {
+  const value = color.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(value)) return false;
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return (red * 299 + green * 587 + blue * 114) / 1000 < 72;
 }
 
 function renderNodeCard(node: LayoutNode, offline = false): string {
@@ -125,13 +143,14 @@ function renderNodeCard(node: LayoutNode, offline = false): string {
   const iconHTML = iconURL
     ? `<img src="${iconURL}" alt="" data-fallback="${escapeHTML(fallback)}">`
     : fallback;
+  const contrastClass = needsDarkThemeContrast(info.color) ? ' dfy-icon-needs-contrast' : '';
 
   const cx = node.x + node.width / 2;
   const cy = node.y + node.height / 2;
 
   return `<div class="dfy-node service-${info.type}" data-id="${escapeHTML(node.id)}" data-node-id="${escapeHTML(node.id)}" data-label="${escapeHTML(node.label)}" data-type="${escapeHTML(info.type)}" data-cx="${cx}" data-cy="${cy}"
     style="--brand:${info.color};--brand-bg:${info.bgColor};">
-    <div class="dfy-icon">${iconHTML}</div>
+    <div class="dfy-icon${contrastClass}">${iconHTML}</div>
     <div class="dfy-label-wrap"><div class="dfy-label">${escapeHTML(node.label)}</div></div>
   </div>`;
 }
@@ -147,21 +166,6 @@ function renderSubgraph(sg: LayoutSubgraph): string {
     style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;">
     <div class="dfy-subgraph-label">${escapeHTML(sg.label)}</div>
   </div>`;
-}
-
-function simplifyEdgeLabel(label?: string): string {
-  if (!label) return '';
-  const lower = label.toLowerCase();
-  if (lower.includes('grpc')) return 'gRPC';
-  if (lower.includes('rest') || lower.includes('http')) return 'REST';
-  if (lower.includes('sql') || lower.includes('query')) return 'SQL';
-  if (lower.includes('event') || lower.includes('publish') || lower.includes('subscribe')) return 'Events';
-  if (lower.includes('cache')) return 'Cache';
-  if (lower.includes('scrape') || lower.includes('metrics')) return 'Metrics';
-  
-  const words = label.split(/\s+/);
-  if (words.length <= 2) return label;
-  return words.slice(0, 2).join(' ') + '...';
 }
 
 const THEMES_AVAILABLE = ['light', 'dark', 'tokyo-night', 'nord', 'catppuccin'] as const;
@@ -197,7 +201,7 @@ export function generateInteractiveHTML(
 
   // Serialize layout data for the client script
   const NODE_DATA = layout.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, w: n.width, h: n.height }));
-  const EDGE_DATA = layout.edges.map((e) => ({ from: e.from, to: e.to, label: simplifyEdgeLabel(e.label), dashed: e.dashed }));
+  const EDGE_DATA = layout.edges.map((e) => ({ from: e.from, to: e.to, label: e.label ?? '', dashed: e.dashed }));
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="${initialTheme}">
@@ -250,6 +254,7 @@ ${fontImport}
     button:hover,select:hover{background:color-mix(in srgb,var(--text) 8%,transparent);border-color:color-mix(in srgb,var(--text) 25%,transparent);}
     button.primary{background:var(--edge-color-active);border-color:var(--edge-color-active);color:white;}
     button.primary:hover{filter:brightness(1.1);}
+    button:disabled{opacity:0.4;cursor:not-allowed;}
     select{padding-right:26px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;}
     .main{flex:1;display:flex;min-height:0;}
     .sidebar{width:220px;background:var(--surface);border-right:1px solid color-mix(in srgb,var(--text) 8%,transparent);padding:14px;overflow-y:auto;flex-shrink:0;transition:width 0.2s,padding 0.2s,opacity 0.15s;}
@@ -275,8 +280,13 @@ ${fontImport}
     .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer;pointer-events:visibleStroke;}
     .edge-path{fill:none;stroke:var(--edge-color);stroke-width:1.8;transition:all 0.15s;pointer-events:none;}
     .edge-path.dashed{stroke-dasharray:5 5;}
-    .edge-label-text{font-size:10px;fill:var(--text-muted);font-weight:500;opacity:0.6;transition:opacity 0.15s;}
-    .edge-label-bg{fill:var(--bg);stroke:var(--subgraph-border);stroke-width:0.5;opacity:0.6;transition:opacity 0.15s;}
+    /* A halo in the page colour keeps the text readable over whatever it
+       crosses, without a filled box that hides the line underneath. */
+    .edge-label-text{font-size:10px;fill:var(--text-muted);font-weight:500;opacity:0.75;
+      paint-order:stroke fill;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round;
+      pointer-events:none;transition:opacity 0.15s;}
+    .edge-label-text.edge-label-secondary{opacity:0;}
+    .edge-label-bg{display:none;}
     .edge-group:hover .edge-path, .edge-group.active .edge-path { stroke: var(--edge-color-active); stroke-width: 3; }
     .edge-group:hover .edge-label-bg, .edge-group:hover .edge-label-text, .edge-group.active .edge-label-bg, .edge-group.active .edge-label-text { opacity: 1; }
     .edges-svg.has-active .edge-group:not(.active) { opacity: 0.15; }
@@ -288,6 +298,10 @@ ${fontImport}
     .dfy-subgraph.selected{outline:2px solid var(--edge-color-active);outline-offset:2px;}
     .dfy-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
     .dfy-icon img,.dfy-icon svg{width:16px;height:16px;display:block;object-fit:contain;pointer-events:none;user-select:none;-webkit-user-drag:none;}
+    html[data-theme="dark"] .dfy-icon-needs-contrast img,
+    html[data-theme="tokyo-night"] .dfy-icon-needs-contrast img,
+    html[data-theme="nord"] .dfy-icon-needs-contrast img,
+    html[data-theme="catppuccin"] .dfy-icon-needs-contrast img{filter:brightness(0) invert(1);}
     .dfy-label-wrap{flex:1;min-width:0;}
     .dfy-label{font-size:11px;font-weight:500;color:var(--text);letter-spacing:-0.01em;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;pointer-events:none;}
     body.edit-mode .dfy-label{cursor:text;white-space:normal;pointer-events:auto;}
@@ -360,6 +374,20 @@ ${fontImport}
       font-size: 0.75rem;
       color: var(--text-muted);
     }
+    .dfy-hidden-panel{position:fixed;left:24px;bottom:24px;max-width:320px;display:none;
+      flex-wrap:wrap;gap:6px;padding:10px 12px;background:var(--surface);
+      border:1px solid var(--subgraph-border);border-radius:8px;box-shadow:var(--panel-shadow);
+      z-index:1000;font-size:0.72rem;}
+    .dfy-hidden-panel.visible{display:flex;}
+    .dfy-hidden-head{width:100%;display:flex;align-items:center;justify-content:space-between;
+      gap:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;
+      font-size:0.62rem;}
+    .dfy-hidden-head button{border:1px solid var(--subgraph-border);background:transparent;
+      color:var(--text-muted);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.62rem;}
+    .dfy-hidden-head button:hover{color:var(--text);}
+    .dfy-hidden-chip{border:1px solid var(--subgraph-border);background:var(--subgraph-bg);
+      color:var(--text);border-radius:100px;padding:3px 9px;cursor:pointer;font-size:0.68rem;}
+    .dfy-hidden-chip:hover{border-color:var(--edge-color-active);}
     .dfy-minimap {
       position: fixed;
       bottom: 24px; right: 24px;
@@ -392,7 +420,8 @@ ${fontImport}
       <span class="pill" id="snap-pill" style="display:none;background:var(--edge-color-active);color:#fff">SNAP ON</span>
       <div class="btn-group">
         <button id="legend-btn" title="Toggle legend (L)">Legend</button>
-        <button id="edges-btn" title="Toggle edges (H)">Edges</button>
+        <button id="edges-btn" title="Toggle all connections">Edges</button>
+        <button id="hide-btn" title="Hide selected element (H)" disabled>Hide</button>
         <button id="edit-btn" title="Edit labels (E)">Edit</button>
         <button id="theme-btn" title="Cycle theme (T)">Theme</button>
         <button id="layout-btn" title="Reset layout to original (Alt+R)">Auto-layout</button>
@@ -402,6 +431,14 @@ ${fontImport}
           <option value="svg">SVG</option>
           <option value="jpeg">JPEG</option>
           <option value="mmd">Mermaid (.mmd)</option>
+          <option value="png:light">PNG - light</option>
+          <option value="png:dark">PNG - dark</option>
+          <option value="jpeg:light">JPEG - light</option>
+          <option value="jpeg:dark">JPEG - dark</option>
+          <option value="svg:light">SVG - light</option>
+          <option value="svg:dark">SVG - dark</option>
+          <option value="pdf:light">PDF - light</option>
+          <option value="pdf:dark">PDF - dark</option>
         </select>
         <button class="primary" id="reset-btn" title="Reset zoom/pan (R)">Reset</button>
       </div>
@@ -454,6 +491,8 @@ ${fontImport}
       <span><kbd>E</kbd> edit</span>
       <span><kbd>L</kbd> legend</span>
       <span><kbd>Del</kbd> remove node</span>
+      <span><kbd>H</kbd> hide</span>
+      <span><kbd>⇧H</kbd> show all</span>
       <span>Drag cards · click label in edit mode</span>
     </div>
   </div>
@@ -482,6 +521,11 @@ ${fontImport}
     const canvas = document.getElementById('canvas');
     const edgesGroup = document.getElementById('edges-group');
     const cardMap = {};
+    const hiddenEdgeKeys = new Set();
+
+    function edgeKey(edge) {
+      return edge.from + '>' + edge.to + '>' + (edge.label || '');
+    }
     
     // Built-in pan and zoom.
     // The viewer used to load this from a CDN. A saved diagram then broke
@@ -683,8 +727,107 @@ ${fontImport}
                ' L ' + ex + ' ' + ey;
       }
     }
+    /**
+     * Finds where an edge label should sit.
+     *
+     * The longest straight run of the route is the calmest place for text. The
+     * label is lifted perpendicular to that run, so it never covers the line it
+     * describes.
+     */
+    function labelAnchor(pathEl, d) {
+      const LIFT = 9;
+      try {
+        const total = pathEl.getTotalLength();
+        if (total > 0) {
+          const steps = Math.max(8, Math.min(60, Math.round(total / 12)));
+          let best = { length: -1, mid: total / 2, dx: 1, dy: 0 };
+          let runStart = 0;
+          let prev = pathEl.getPointAtLength(0);
+          let prevDir = null;
+
+          const consider = (from, to) => {
+            const runLength = to - from;
+            if (runLength <= best.length) return;
+            const mid = from + runLength / 2;
+            const a = pathEl.getPointAtLength(Math.max(0, mid - 2));
+            const b = pathEl.getPointAtLength(Math.min(total, mid + 2));
+            best = { length: runLength, mid, dx: b.x - a.x, dy: b.y - a.y };
+          };
+
+          for (let i = 1; i <= steps; i += 1) {
+            const at = (total * i) / steps;
+            const point = pathEl.getPointAtLength(at);
+            const dir = Math.abs(point.x - prev.x) > Math.abs(point.y - prev.y) ? 'h' : 'v';
+            if (prevDir && dir !== prevDir) {
+              consider(runStart, at);
+              runStart = at;
+            }
+            prevDir = dir;
+            prev = point;
+          }
+          consider(runStart, total);
+
+          const at = pathEl.getPointAtLength(best.mid);
+          const norm = Math.hypot(best.dx, best.dy) || 1;
+          let nx = -best.dy / norm;
+          let ny = best.dx / norm;
+          // Always lift upward on screen, so a label never sits under its line.
+          if (ny > 0) { nx = -nx; ny = -ny; }
+          return {
+            x: at.x + nx * LIFT,
+            y: at.y + ny * LIFT,
+            tx: best.dx / norm,
+            ty: best.dy / norm,
+          };
+        }
+      } catch (_) {
+        // getTotalLength is unavailable before layout. Fall through.
+      }
+
+      const parts = String(d).match(/-?[\\d.]+/g) || ['0', '0'];
+      return { x: Number(parts[0]) || 0, y: (Number(parts[1]) || 0) - LIFT, tx: 1, ty: 0 };
+    }
+
+    /** Moves a label along its line until it has clear space. */
+    function separateLabel(anchor, label, placedLabels) {
+      const width = Math.max(28, String(label).length * 5.8 + 8);
+      const height = 14;
+      const shifts = [0, width * 0.7, -width * 0.7, width * 1.4, -width * 1.4];
+      const lifts = [0, 15, 30];
+
+      for (const lift of lifts) {
+        for (const shift of shifts) {
+          const x = anchor.x + anchor.tx * shift;
+          const y = anchor.y + anchor.ty * shift - lift;
+          const box = {
+            left: x - width / 2,
+            right: x + width / 2,
+            top: y - height / 2,
+            bottom: y + height / 2,
+          };
+          const overlaps = placedLabels.some(other =>
+            box.left < other.right && box.right > other.left &&
+            box.top < other.bottom && box.bottom > other.top,
+          );
+          if (!overlaps) {
+            placedLabels.push(box);
+            return { x, y };
+          }
+        }
+      }
+
+      placedLabels.push({
+        left: anchor.x - width / 2,
+        right: anchor.x + width / 2,
+        top: anchor.y - height / 2,
+        bottom: anchor.y + height / 2,
+      });
+      return anchor;
+    }
+
     function drawEdges() {
       edgesGroup.innerHTML = '';
+      const placedLabels = [];
       const w = canvas.offsetWidth, h = canvas.offsetHeight;
       const svg = document.getElementById('edges');
       svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
@@ -693,9 +836,16 @@ ${fontImport}
       EDGES.forEach(e => {
         const a = cardMap[e.from], b = cardMap[e.to];
         if (!a || !b || !a.isConnected || !b.isConnected) return;
+        const stableEdgeKey = edgeKey(e);
+        if (hiddenEdgeKeys.has(stableEdgeKey)) return;
+        // An edge into something hidden would point at empty space.
+        if (a.dataset.dfyHidden || b.dataset.dfyHidden) return;
         
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'edge-group');
+        group.setAttribute('data-edge-key', stableEdgeKey);
+        group.setAttribute('data-from', e.from);
+        group.setAttribute('data-to', e.to);
         
         const d = routePath(a, b);
 
@@ -710,24 +860,24 @@ ${fontImport}
         path.setAttribute('class', 'edge-path' + (e.dashed ? ' dashed' : ''));
         path.setAttribute('marker-end', 'url(#dfy-arrow)');
         group.appendChild(path);
+        // Add the path before measurement. Some browsers cannot measure a detached path.
+        edgesGroup.appendChild(group);
         
         if (e.label) {
-          const ac = center(a), bc = center(b);
-          const mx = (ac.x + bc.x) / 2, my = (ac.y + bc.y) / 2;
-          const tw = e.label.length * 6 + 10;
-          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          bg.setAttribute('x', mx - tw / 2);
-          bg.setAttribute('y', my - 7);
-          bg.setAttribute('width', tw);
-          bg.setAttribute('height', 14);
-          bg.setAttribute('rx', 3);
-          bg.setAttribute('class', 'edge-label-bg');
-          group.appendChild(bg);
+          // Sit the label on the line it belongs to, lifted just clear of it.
+          //
+          // The old placement used the midpoint between the two node centres,
+          // which an orthogonal route rarely passes through, and drew an opaque
+          // box that cut the line in half. This walks the real path, takes the
+          // longest straight run, and floats the text above it.
+          const anchor = separateLabel(labelAnchor(hitPath, d), e.label, placedLabels);
           const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          text.setAttribute('x', mx);
-          text.setAttribute('y', my + 3);
+          text.setAttribute('x', anchor.x);
+          text.setAttribute('y', anchor.y);
           text.setAttribute('text-anchor', 'middle');
-          text.setAttribute('class', 'edge-label-text');
+          text.setAttribute('dominant-baseline', 'middle');
+          const secondaryLabel = /^(uses|routes)$/i.test(e.label.trim());
+          text.setAttribute('class', 'edge-label-text' + (secondaryLabel ? ' edge-label-secondary' : ''));
           text.textContent = e.label;
           group.appendChild(text);
         }
@@ -751,7 +901,6 @@ ${fontImport}
           });
         });
         
-        edgesGroup.appendChild(group);
       });
       
       canvas.addEventListener('click', () => {
@@ -876,6 +1025,8 @@ ${fontImport}
       document.querySelectorAll('.dfy-node, .dfy-subgraph, .edge-group').forEach(n => n.classList.remove('selected'));
       selectedEl = el;
       if (el) el.classList.add('selected');
+      const hideButton = document.getElementById('hide-btn');
+      if (hideButton) hideButton.disabled = !el;
     }
 
     // ─── Undo / Redo ─────────────────────────────────────────────────────────
@@ -1007,6 +1158,128 @@ ${fontImport}
     }
     if (editBtn) editBtn.addEventListener('click', () => setEdit(!editMode));
 
+    /* ── Hiding ──────────────────────────────────────────────────────────
+       A reader strips a diagram back to the part under discussion. Hiding is
+       reversible and never loses work, unlike delete. */
+    const hidden = new Map();
+
+    function hiddenPanel() {
+      let panel = document.getElementById('dfy-hidden');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'dfy-hidden';
+        panel.className = 'dfy-hidden-panel';
+        document.body.appendChild(panel);
+      }
+      return panel;
+    }
+
+    function renderHiddenPanel() {
+      const panel = hiddenPanel();
+      if (hidden.size === 0) {
+        panel.classList.remove('visible');
+        panel.innerHTML = '';
+        return;
+      }
+      panel.classList.add('visible');
+      panel.innerHTML =
+        '<div class="dfy-hidden-head">Hidden (' + hidden.size + ')' +
+        '<button id="dfy-show-all" title="Show every hidden item (Shift+H)">Show all</button></div>';
+
+      for (const entry of hidden.values()) {
+        const chip = document.createElement('button');
+        chip.className = 'dfy-hidden-chip';
+        chip.textContent = entry.name;
+        chip.title = 'Show ' + entry.name;
+        chip.addEventListener('click', () => restore(entry));
+        panel.appendChild(chip);
+      }
+      panel.querySelector('#dfy-show-all').addEventListener('click', showAllHidden);
+    }
+
+    function nameOf(el) {
+      if (el.classList.contains('dfy-node')) return el.dataset.label || el.dataset.id || 'node';
+      if (el.classList.contains('dfy-subgraph')) return el.dataset.label || 'group';
+      if (el.classList.contains('edge-group')) {
+        const from = cardMap[el.dataset.from]?.dataset.label || el.dataset.from || 'source';
+        const to = cardMap[el.dataset.to]?.dataset.label || el.dataset.to || 'target';
+        return from + ' to ' + to;
+      }
+      return 'connection';
+    }
+
+    function hiddenKey(el) {
+      if (el.classList.contains('dfy-node')) return 'node:' + (el.dataset.id || '');
+      if (el.classList.contains('dfy-subgraph')) return 'group:' + (el.dataset.id || '');
+      if (el.classList.contains('edge-group')) return 'edge:' + (el.dataset.edgeKey || '');
+      return '';
+    }
+
+    function hideElement(el) {
+      if (!el || hidden.has(hiddenKey(el))) return;
+      pushUndo();
+
+      if (el.classList.contains('dfy-subgraph')) {
+        // Hiding a tier hides what it holds, or the members float free.
+        const box = el.getBoundingClientRect();
+        document.querySelectorAll('.dfy-node').forEach(card => {
+          const r = card.getBoundingClientRect();
+          if (r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom) {
+            hideOne(card);
+          }
+        });
+      }
+
+      hideOne(el);
+      drawEdges();
+      renderHiddenPanel();
+    }
+
+    function hideOne(el) {
+      const key = hiddenKey(el);
+      if (!key || hidden.has(key)) return;
+      if (el.classList.contains('edge-group')) {
+        hiddenEdgeKeys.add(el.dataset.edgeKey);
+        hidden.set(key, { key, edgeKey: el.dataset.edgeKey, name: nameOf(el) });
+        return;
+      }
+      el.dataset.dfyHidden = '1';
+      el.style.display = 'none';
+      hidden.set(key, { key, el, name: nameOf(el) });
+    }
+
+    function restore(entry) {
+      if (entry.edgeKey) {
+        hiddenEdgeKeys.delete(entry.edgeKey);
+      } else if (entry.el) {
+        entry.el.style.display = '';
+        delete entry.el.dataset.dfyHidden;
+      }
+      hidden.delete(entry.key);
+      drawEdges();
+      renderHiddenPanel();
+    }
+
+    function showAllHidden() {
+      for (const entry of hidden.values()) {
+        if (entry.edgeKey) {
+          hiddenEdgeKeys.delete(entry.edgeKey);
+        } else if (entry.el) {
+          entry.el.style.display = '';
+          delete entry.el.dataset.dfyHidden;
+        }
+      }
+      hidden.clear();
+      drawEdges();
+      renderHiddenPanel();
+    }
+
+    document.getElementById('hide-btn').addEventListener('click', () => {
+      if (!selectedEl) return;
+      hideElement(selectedEl);
+      selectElement(null);
+    });
+
     document.addEventListener('keydown', e => {
       const tag = document.activeElement?.tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
@@ -1019,6 +1292,18 @@ ${fontImport}
           selectedEl = null;
           drawEdges();
         }
+        return;
+      }
+
+      // Hide the selection. Unlike delete, this is reversible from the panel,
+      // so a reader can strip a diagram back to the part being discussed.
+      if (e.key === 'h' && selectedEl && !editMode && !typing) {
+        hideElement(selectedEl);
+        selectedEl = null;
+        return;
+      }
+      if (e.key === 'H' && !editMode && !typing) {
+        showAllHidden();
         return;
       }
 
@@ -1236,8 +1521,11 @@ ${fontImport}
       const textColor = style.getPropertyValue('--text').trim() || '#0f172a';
       const edgeColor = style.getPropertyValue('--edge-color').trim() || '#94a3b8';
 
-      const cards = Array.from(document.querySelectorAll('.dfy-node'));
-      const groups = Array.from(document.querySelectorAll('.dfy-subgraph'));
+      // What the reader hid must stay out of the export.
+      const cards = Array.from(document.querySelectorAll('.dfy-node'))
+        .filter(element => !element.dataset.dfyHidden && element.style.display !== 'none');
+      const groups = Array.from(document.querySelectorAll('.dfy-subgraph'))
+        .filter(element => !element.dataset.dfyHidden && element.style.display !== 'none');
 
       // Measure the drawing, so nothing is cropped whatever the user moved.
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1257,7 +1545,10 @@ ${fontImport}
         const w = card.offsetWidth, h = card.offsetHeight;
         const x = cx - w / 2, y = cy - h / 2;
         const brand = getComputedStyle(card).getPropertyValue('--brand').trim() || '#94a3b8';
-        boxes.push({ kind: 'node', x, y, w, h, label: card.dataset.label || '', brand });
+        const iconElement = card.querySelector('img');
+        const icon = iconElement?.getAttribute('src') || '';
+        const iconFilter = iconElement ? getComputedStyle(iconElement).filter : 'none';
+        boxes.push({ kind: 'node', x, y, w, h, label: card.dataset.label || '', brand, icon, iconFilter });
         minX = Math.min(minX, x); minY = Math.min(minY, y);
         maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
       });
@@ -1308,6 +1599,10 @@ ${fontImport}
         Array.from(liveEdges.querySelectorAll('text')).forEach(el => {
           const clone = el.cloneNode(true);
           clone.setAttribute('fill', getComputedStyle(el).fill || textColor);
+          clone.setAttribute('opacity', getComputedStyle(el).opacity || '1');
+          clone.setAttribute('stroke', bg);
+          clone.setAttribute('stroke-width', '3');
+          clone.setAttribute('paint-order', 'stroke fill');
           parts.push(clone.outerHTML);
         });
         const markers = liveEdges.querySelector('defs');
@@ -1320,8 +1615,15 @@ ${fontImport}
           '" rx="6" fill="' + esc(surface) + '" stroke="' + esc(b.brand) + '" stroke-width="1"/>');
         parts.push('<rect x="' + b.x + '" y="' + b.y + '" width="3" height="' + b.h +
           '" fill="' + esc(b.brand) + '"/>');
-        parts.push('<text x="' + (b.x + b.w / 2) + '" y="' + (b.y + b.h / 2) +
-          '" text-anchor="middle" dominant-baseline="central" ' +
+        if (b.icon) {
+          parts.push('<image href="' + esc(b.icon) + '" x="' + (b.x + 9) + '" y="' +
+            (b.y + b.h / 2 - 8) + '" width="16" height="16"' +
+            (b.iconFilter && b.iconFilter !== 'none' ? ' style="filter:' + esc(b.iconFilter) + '"' : '') + '/>');
+        }
+        const textX = b.icon ? b.x + 33 : b.x + b.w / 2;
+        const textAnchor = b.icon ? 'start' : 'middle';
+        parts.push('<text x="' + textX + '" y="' + (b.y + b.h / 2) +
+          '" text-anchor="' + textAnchor + '" dominant-baseline="central" ' +
           'font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="' +
           esc(textColor) + '">' + esc(b.label) + '</text>');
       });
@@ -1330,7 +1632,11 @@ ${fontImport}
       return { svg: parts.join(''), width: Math.round(width), height: Math.round(height) };
     }
 
-    async function exportRaster(format) {
+    function exportFileName(format, theme) {
+      return TITLE_SAFE + (theme ? '-' + theme : '') + '.' + format;
+    }
+
+    async function exportRaster(format, theme) {
       // Draw the exported SVG onto a canvas. No library, and no network.
       const built = buildExportSVG();
       const scale = 3;
@@ -1357,25 +1663,77 @@ ${fontImport}
 
         const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
         surface.toBlob(out => {
-          if (out) download(TITLE_SAFE + '.' + format, out, mime);
+          if (out) download(exportFileName(format, theme), out, mime);
         }, mime, 0.92);
       } finally {
         URL.revokeObjectURL(url);
       }
     }
 
-    function exportSVG() {
-      download(TITLE_SAFE + '.svg', buildExportSVG().svg, 'image/svg+xml');
+    function exportSVG(theme) {
+      download(exportFileName('svg', theme), buildExportSVG().svg, 'image/svg+xml');
+    }
+
+    function exportPDF(theme) {
+      const built = buildExportSVG();
+      const frame = document.createElement('iframe');
+      frame.title = 'PDF export';
+      frame.style.position = 'fixed';
+      frame.style.width = '1px';
+      frame.style.height = '1px';
+      frame.style.opacity = '0';
+      frame.style.pointerEvents = 'none';
+      document.body.appendChild(frame);
+
+      const page = frame.contentDocument;
+      if (!page) {
+        frame.remove();
+        throw new Error('The PDF export could not start.');
+      }
+      page.open();
+      page.write('<!doctype html><html><head><title>' + exportFileName('pdf', theme) + '</title>' +
+        '<style>@page{size:' + built.width + 'px ' + built.height + 'px;margin:0}' +
+        'html,body{margin:0;width:' + built.width + 'px;height:' + built.height + 'px;overflow:hidden}' +
+        'svg{display:block;width:100%;height:100%}</style></head><body>' + built.svg + '</body></html>');
+      page.close();
+
+      const printWindow = frame.contentWindow;
+      if (!printWindow) {
+        frame.remove();
+        throw new Error('The PDF export could not open the print view.');
+      }
+      const removeFrame = () => frame.remove();
+      printWindow.addEventListener('afterprint', removeFrame, { once: true });
+      printWindow.focus();
+      printWindow.print();
+      setTimeout(removeFrame, 60000);
     }
     document.getElementById('format-select').addEventListener('change', async e => {
       const fmt = e.target.value;
       e.target.value = '';
       if (!fmt) return;
+      // A dark export uses that theme without making the reader switch to it
+      // and back. The theme is restored before the function returns.
+      const [kind, wanted] = fmt.split(':');
+      const original = document.documentElement.getAttribute('data-theme');
       try {
-        if (fmt === 'png' || fmt === 'jpeg') await exportRaster(fmt);
-        else if (fmt === 'svg') exportSVG();
-        else if (fmt === 'mmd') download(TITLE_SAFE + '.mmd', MERMAID_SRC, 'text/plain');
-      } catch (err) { alert('Export failed: ' + (err && err.message || err)); }
+        if (wanted && wanted !== original) {
+          setTheme(wanted);
+          // Let the browser apply the new colours before they are read back.
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
+
+        if (kind === 'png' || kind === 'jpeg') await exportRaster(kind, wanted);
+        else if (kind === 'svg') exportSVG(wanted);
+        else if (kind === 'pdf') exportPDF(wanted);
+        else if (kind === 'mmd') download(TITLE_SAFE + '.mmd', MERMAID_SRC, 'text/plain');
+      } catch (err) {
+        console.error('Export failed', err);
+      } finally {
+        if (wanted && wanted !== original) {
+          setTheme(original);
+        }
+      }
     });
     // Search Input
     const searchInput = document.getElementById('dfy-search');

@@ -195,7 +195,7 @@ export function analysisToGraph(
 
   const modules = dedupe(analysis.serviceDirectories ?? []);
   if (modules.length > 0) {
-    for (const moduleName of modules.slice(0, 24)) {
+    for (const moduleName of modules.slice(0, 36)) {
       const label = titleCase(moduleName);
       let id = safeId(label, 'mod');
       let suffix = 2;
@@ -204,7 +204,7 @@ export function analysisToGraph(
         suffix += 1;
       }
       usedIds.add(id);
-      moduleIdByName.set(moduleName, id);
+      moduleIdByName.set(lookupKey(moduleName), id);
 
       const node: IRNode = {
         id,
@@ -253,11 +253,12 @@ export function analysisToGraph(
 
   const upstream: Candidate[] = [];
   const downstream: Candidate[] = [];
+  const serviceIdByName = new Map<string, string>();
   const seenLabels = new Set<string>(coreNodes.map((n) => n.label.toLowerCase()));
 
   for (const serviceName of dedupe(analysis.detectedServices ?? [])) {
     // Skip a name that already became a module node.
-    if (moduleIdByName.has(serviceName)) {
+    if (moduleIdByName.has(lookupKey(serviceName))) {
       continue;
     }
 
@@ -281,6 +282,8 @@ export function analysisToGraph(
         : undefined,
     };
     addNode(node, tier);
+    serviceIdByName.set(lookupKey(serviceName), node.id);
+    serviceIdByName.set(lookupKey(candidate.label), node.id);
 
     if (UPSTREAM_TYPES.has(candidate.serviceType)) {
       upstream.push(candidate);
@@ -304,17 +307,37 @@ export function analysisToGraph(
 
   // Internal module links come straight from imports and project references.
   for (const link of analysis.internalLinks ?? []) {
-    const from = moduleIdByName.get(link.from);
-    const to = moduleIdByName.get(link.to);
+    const from = moduleIdByName.get(lookupKey(link.from));
+    const to = moduleIdByName.get(lookupKey(link.to));
     if (from && to && from !== to) {
       graph.edges.push({ from, to, label: 'uses', kind: 'sync', bidirectional: false });
     }
+  }
+
+  const linkedServiceIds = new Set<string>();
+  for (const link of analysis.serviceLinks ?? []) {
+    const from = moduleIdByName.get(lookupKey(link.from));
+    const to = serviceIdByName.get(lookupKey(link.to));
+    if (!from || !to || from === to) {
+      continue;
+    }
+    linkedServiceIds.add(to);
+    graph.edges.push({
+      from,
+      to,
+      label: link.label,
+      kind: link.kind,
+      bidirectional: false,
+    });
   }
 
   // Infrastructure hangs off the core. With modules, attach to the first one,
   // because the analysis cannot prove which module owns which store.
   const infrastructureOwner = coreNodes[0];
   for (const service of downstream) {
+    if (linkedServiceIds.has(service.id)) {
+      continue;
+    }
     const edgeStyle = EDGE_LABEL_BY_SERVICE_TYPE[service.serviceType] ?? { label: 'uses', kind: 'sync' as const };
     graph.edges.push({
       from: infrastructureOwner.id,
@@ -328,6 +351,10 @@ export function analysisToGraph(
   graph.groups = [...groupIndex.values()].filter((g) => g.nodeIds.length > 0);
 
   return dropDuplicateEdges(graph);
+}
+
+function lookupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function dedupe(values: string[]): string[] {

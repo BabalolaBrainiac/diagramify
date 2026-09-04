@@ -18,6 +18,7 @@ import {
 } from './ir.js';
 import { graphToMermaid, mermaidToGraph } from './ir-mermaid.js';
 import { analysisToGraph } from './ir-analyzer.js';
+import { summarizeEvidence } from './evidence.js';
 
 /**
  * Prompt for schema-constrained output.
@@ -49,9 +50,15 @@ and a webhook as "async". Wire a layered module explicitly: presentation calls
 application, application calls domain and infrastructure, infrastructure reaches
 the store.
 
+DEPTH - a shallow diagram is a failed diagram. When the prompt lists confirmed
+components, every one of them must appear as a node, wired to whatever uses it.
+Split a layered module into the layers the code actually has. Show a worker, a
+scheduler, and a consumer separately from the service that enqueues to them.
+Name the concrete component, not the category: "Kinde", not "Auth Provider".
+
 Return the graph only. Add no commentary.`;
 
-const SYSTEM_PROMPT = `You are a senior systems architect producing detailed, production-grade Mermaid architecture diagrams.
+const SYSTEM_PROMPT = `You are a senior systems architect. Produce detailed, production-grade architecture diagrams in Mermaid format.
 
 OUTPUT FORMAT
 - Mermaid source only. No markdown fences. No commentary.
@@ -277,13 +284,33 @@ function buildUserPrompt(
     );
   }
   if (analysis?.serviceDirectories?.length) {
-    hints.push(`Module directories: ${analysis.serviceDirectories.join(', ')}. Give each one a node.`);
+    hints.push(`Confirmed internal components: ${analysis.serviceDirectories.join(', ')}. Give each one a node.`);
+  }
+  // Evidence is the strongest signal available. It names a component and the
+  // file that proves it, so the model wires a real thing rather than a guess.
+  if (analysis?.evidence?.length) {
+    const lines = summarizeEvidence(analysis.evidence);
+    hints.push(
+      'CONFIRMED components, each proved by a file in the repository. Include ' +
+        `every one of these as a node:\n${lines.map((l) => `  - ${l}`).join('\n')}`,
+    );
   }
   if (analysis?.internalLinks?.length) {
     hints.push(
       `Internal dependencies (A depends on B): ${analysis.internalLinks
         .map((l) => `${l.from} -> ${l.to}`)
         .join(', ')}.`,
+    );
+  }
+  if (analysis?.serviceLinks?.length) {
+    hints.push(
+      'Confirmed runtime connections. Preserve each source, target, label, and edge type:\n' +
+        analysis.serviceLinks
+          .slice(0, 80)
+          .map((link) =>
+            `  - ${link.from} -> ${link.to} [${link.label}, ${link.kind}; proved by ${link.source}]`,
+          )
+          .join('\n'),
     );
   }
 
