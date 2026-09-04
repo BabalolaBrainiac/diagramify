@@ -1,6 +1,12 @@
 import type { DiagramifyResult, GenerateOptions } from './types.js';
 import { loadConfig } from './config.js';
-import { resolveModel, callLLM, callLLMForObject, hasCredentials } from './provider.js';
+import {
+  resolveModel,
+  resolveProviderAndModel,
+  callLLM,
+  callLLMForObject,
+  hasCredentials,
+} from './provider.js';
 import { renderDiagram } from './render.js';
 import { basename, resolve } from 'path';
 import { analyzeCodebase } from './analyze.js';
@@ -170,12 +176,17 @@ export async function generateGraph(
 
   if (!hasCredentials(config)) {
     throw new Error(
-      `No API key found for provider "${config.provider}". ` +
-        'Set the provider key, or run with --no-llm to build the diagram from the codebase alone.',
+      'No provider key found. Set a key for Anthropic, OpenAI, or Google, ' +
+        'or run with --no-llm to build the diagram from the codebase alone.',
     );
   }
 
-  const model = resolveModel(config);
+  // Ask the provider which models this key reaches, and take the newest that
+  // fits the tier. A name pinned at release time goes stale; this does not.
+  const resolved = await resolveProviderAndModel(config, (notice) => console.error(notice));
+  const model = resolved.model;
+  console.error(`Using ${resolved.provider} / ${resolved.modelId}`);
+
   const userPrompt = buildUserPrompt(contextSummary, analysis, options, direction);
 
   // Path 2: schema-constrained output. This is the default.

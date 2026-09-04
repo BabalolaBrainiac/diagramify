@@ -25,6 +25,10 @@ export type ProviderName = 'anthropic' | 'openai' | 'google';
 export interface DiagramifyConfig {
   provider: ProviderName;
   model?: string;
+  /** How much capability to ask for when no model is named. */
+  tier?: 'fast' | 'balanced' | 'best';
+  /** Set false to skip the provider model lookup and use a pinned name. */
+  discoverModels?: boolean;
   apiKey?: string;
   theme?: string;
   darkMode?: boolean;

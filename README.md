@@ -27,6 +27,7 @@ Renders to **interactive HTML**, SVG, PNG, JPEG, and Mermaid source. Ships three
 - **Diagram diffing** — `diagramify diff` compares two `.mmd` files and highlights changes
 - **CI integration** — `diagramify ci` generates GitHub Actions / GitLab CI workflows
 - **Hot-reload preview** — `diagramify preview` and `diagramify watch` serve and auto-reload on file changes via WebSocket
+- **One key is all you need** — the provider is chosen from whichever key is set, and the newest suitable model is discovered from the provider itself, not pinned in this package
 - **LLM-agnostic** — Claude, OpenAI, or Google Gemini, through schema-constrained output
 - **React component** — embed the interactive viewer in any React app
 - **No browser required** — pure TypeScript rendering, no Puppeteer
@@ -92,6 +93,7 @@ diagramify render diagram.mmd --out html,svg,png
 | `diagramify watch <file>` | Lightweight `.mmd` file watcher; no Express | ✅ | ✅ |
 | `diagramify dev [--file]` | Alias for `preview` — recommended entry point for dev workflows | ✅ | ✅ |
 | `diagramify check` | Fail a build when the diagram no longer matches the code | — | — |
+| `diagramify models` | Show which provider and model a key resolves to | — | — |
 | `diagramify diff` | Compare two `.mmd` files visually | — | — |
 | `diagramify ci` | Generate CI workflow files | — | — |
 | `diagramify init` | Scaffold a config file | — | — |
@@ -245,6 +247,32 @@ diagramify watch diagram.mmd --open --theme dark
 
 ---
 
+### `diagramify models`
+
+Shows which provider a key selects, and which model each tier resolves to. Run
+it before `generate` to confirm the choice without spending a token.
+
+```bash
+diagramify models            # the choice for every key you have set
+diagramify models --all      # also list every reachable model
+diagramify models --refresh  # ignore the cached list and ask again
+```
+
+Example:
+
+```text
+Keys found for: google
+Selected provider: google
+
+google
+  47 models reachable
+    fast      gemini-flash-lite-latest
+    balanced  gemini-flash-latest <- default
+    best      gemini-pro-latest
+```
+
+---
+
 ### `diagramify check`
 
 Compares the committed diagram against the code, and reports what changed.
@@ -344,8 +372,28 @@ export GOOGLE_GENERATIVE_AI_API_KEY=...
 # Defaults (optional)
 export DIAGRAMIFY_PROVIDER=google
 export DIAGRAMIFY_MODEL=gemini-flash-latest
+export DIAGRAMIFY_TIER=best
 export DIAGRAMIFY_THEME=dark
 ```
+
+`GEMINI_API_KEY` also works in place of `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+**You do not have to name a provider or a model.** Set one key and Diagramify
+works out the rest:
+
+1. The provider is the one your key belongs to. `DIAGRAMIFY_PROVIDER` or
+   `--provider` overrides it. With several keys set, the order is anthropic,
+   openai, google.
+2. The model comes from the provider's own model list, filtered to the models
+   your key can reach. Diagramify prefers a stable build over a preview, a newer
+   family over an older one, and a rolling alias over a dated snapshot.
+3. `--tier fast|balanced|best` says how much capability to ask for. The default
+   is `balanced`.
+4. `--model` pins an exact model and skips the lookup. `--no-discover` skips the
+   lookup and uses a built-in name.
+
+The model list is cached for a day. `diagramify models --refresh` clears it.
+This is why a new model from any provider works without upgrading this package.
 
 ### Config file (`diagramify.config.ts`)
 

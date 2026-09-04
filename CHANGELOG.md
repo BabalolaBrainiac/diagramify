@@ -48,6 +48,19 @@ nothing.
 - Regression coverage for the IR, drift, layout, all exporters, raster fidelity,
   and the viewer. The suite went from 113 to 208 tests.
 
+**Provider and model discovery.** One key is now all a user supplies. The
+provider is chosen from whichever key is set, and the model is read from the
+provider's own list rather than pinned in this package.
+
+- `src/core/models.ts`: provider detection, model discovery, ranking, and a
+  one-day cache.
+- `diagramify models` reports the provider and the model each tier resolves to,
+  before a token is spent.
+- `--tier fast|balanced|best` says how much capability to ask for.
+- `--model` pins an exact model. `--no-discover` skips the lookup.
+- A failed lookup falls back to a built-in name and says why, rather than
+  stopping the run.
+
 ### Changed
 
 - The viewer loads no third-party script. Pan and zoom, and the raster export,

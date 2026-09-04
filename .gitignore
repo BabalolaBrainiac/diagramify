@@ -53,3 +53,4 @@ coverage
 patch*.js
 patch*.cjs
 generate-*.js
+run-with-key.sh

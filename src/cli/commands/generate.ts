@@ -44,7 +44,12 @@ export const generateCommand = new Command()
   .option('--dark', 'Use dark mode theme')
   .option('--background <color>', 'Background color, or "transparent" to keep the alpha channel')
   .option('--provider <name>', 'LLM provider: anthropic|openai|google')
-  .option('--model <id>', 'Model ID override')
+  .option('--model <id>', 'Model ID override. Skips model discovery.')
+  .option(
+    '--tier <tier>',
+    'How much capability to ask for: fast, balanced, best (default: balanced)',
+  )
+  .option('--no-discover', 'Skip the provider model lookup and use a pinned model name')
   .option('--direction <dir>', 'Flow direction: LR, TD, TB, RL (default: LR)')
   .option('--stdout', 'Print Mermaid source to stdout instead of writing files')
   .option('--json', 'Output result as JSON with base64-encoded images')
@@ -70,6 +75,8 @@ export const generateCommand = new Command()
         config: {
           provider: options.provider,
           model: options.model,
+          tier: options.tier,
+          discoverModels: options.discover,
           theme: options.theme,
           darkMode: options.dark ?? false,
           backgroundColor: options.background,

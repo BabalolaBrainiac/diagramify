@@ -4,16 +4,15 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
 import type { DiagramifyConfig, ProviderName } from './types.js';
+import { resolveModelId } from './models.js';
 
-const DEFAULT_MODELS: Record<ProviderName, string> = {
-  anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-4o',
-  google: 'gemini-2.5-flash',
-};
-
-export function resolveModel(config: DiagramifyConfig): LanguageModel {
-  const modelId = config.model ?? DEFAULT_MODELS[config.provider as ProviderName];
-
+/**
+ * Builds the model handle.
+ *
+ * `modelId` is resolved before this call, so the provider is asked what it
+ * offers rather than told a name this package happened to know when it shipped.
+ */
+export function resolveModel(config: DiagramifyConfig, modelId: string): LanguageModel {
   if (config.provider === 'google' && process.env.GEMINI_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = process.env.GEMINI_API_KEY;
   }
@@ -125,4 +124,31 @@ export function hasCredentials(config: DiagramifyConfig): boolean {
     google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
   };
   return (names[config.provider as ProviderName] ?? []).some((name) => Boolean(process.env[name]));
+}
+
+/**
+ * Chooses the provider and the model together, then builds the handle.
+ *
+ * This is the entry point a caller should use. It reports which provider and
+ * model it settled on, so the choice is never a surprise to the user.
+ */
+export async function resolveProviderAndModel(
+  config: DiagramifyConfig,
+  onNotice?: (message: string) => void,
+): Promise<{ model: LanguageModel; modelId: string; provider: ProviderName }> {
+  const credential = config.apiKey;
+
+  const modelId = await resolveModelId(config.provider, {
+    model: config.model,
+    tier: config.tier,
+    apiKey: credential,
+    discover: config.discoverModels,
+    onNotice,
+  });
+
+  return {
+    model: resolveModel(config, modelId),
+    modelId,
+    provider: config.provider,
+  };
 }
