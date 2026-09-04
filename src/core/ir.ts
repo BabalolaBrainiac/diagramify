@@ -13,7 +13,7 @@
  */
 
 import { z } from 'zod';
-import type { ServiceType } from '../icons/services.js';
+import { getServiceDefinition, type ServiceType } from '../icons/services.js';
 
 export type Direction = 'TD' | 'LR' | 'BT' | 'RL';
 
@@ -157,6 +157,49 @@ export type ArchitectureGraphInput = z.infer<typeof architectureGraphSchema>;
  * Construction and repair
  * ──────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * A store, cache, or queue reads as a cylinder whatever the model chose.
+ *
+ * A model picks a shape inconsistently, so the same Redis is a hexagon in one
+ * diagram and a box in the next. Shape carries meaning, so code decides it.
+ */
+const SHAPE_BY_SERVICE_TYPE: Partial<Record<ServiceType, NodeShape>> = {
+  database: 'cylinder',
+  storage: 'cylinder',
+  cache: 'cylinder',
+};
+
+export function shapeForLabel(label: string, requested: NodeShape): NodeShape {
+  const definition = getServiceDefinition(label);
+  if (definition.name.toLowerCase() === 'service') {
+    return requested;
+  }
+  return SHAPE_BY_SERVICE_TYPE[definition.type] ?? requested;
+}
+
+/**
+ * Restores the canonical product name for a known service.
+ *
+ * A model returns `postgresql` or `openai` as readily as `PostgreSQL` or
+ * `OpenAI`. The registry already holds the right spelling, and matching it also
+ * makes the icon and the colour resolve.
+ */
+export function canonicalLabel(raw: string): string {
+  const label = raw.trim();
+  if (!label) {
+    return label;
+  }
+
+  const definition = getServiceDefinition(label);
+  if (definition.name.toLowerCase() === 'service') {
+    return label;
+  }
+
+  // Only correct the spelling. A label the author wrote differently on purpose,
+  // such as "Orders PostgreSQL", keeps its own wording.
+  return definition.name.toLowerCase() === label.toLowerCase() ? definition.name : label;
+}
+
 /** Makes an identifier that Mermaid accepts. */
 export function safeId(raw: string, fallback = 'n'): string {
   const cleaned = raw.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '');
@@ -212,8 +255,8 @@ export function normalizeGraph(
 
     nodes.push({
       id,
-      label: node.label?.trim() || id,
-      shape: node.shape ?? 'rect',
+      label: canonicalLabel(node.label ?? '') || id,
+      shape: shapeForLabel(node.label ?? '', node.shape ?? 'rect'),
       groupId: resolvedGroup,
       description: node.description?.trim() || undefined,
     });

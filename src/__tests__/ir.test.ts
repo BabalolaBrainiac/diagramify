@@ -7,9 +7,16 @@ import {
   serializeGraph,
   validateGraph,
   architectureGraphSchema,
+  canonicalLabel,
+  shapeForLabel,
   type ArchitectureGraph,
 } from '../core/ir.js';
-import { graphToMermaid, mermaidToGraph, escapeLabel } from '../core/ir-mermaid.js';
+import {
+  graphToMermaid,
+  mermaidToGraph,
+  escapeLabel,
+  unescapeLabel,
+} from '../core/ir-mermaid.js';
 import { compareGraphs, formatDriftReport } from '../core/drift.js';
 import { analysisToGraph } from '../core/ir-analyzer.js';
 import type { AnalysisResult } from '../core/types.js';
@@ -363,5 +370,71 @@ describe('analyzer path, with no model', () => {
   it('names the project when it finds no module', () => {
     const result = analysisToGraph(analysis({ detectedServices: ['Redis'] }), { title: 'checkout' });
     expect(result.nodes.some((n) => n.label === 'checkout')).toBe(true);
+  });
+});
+
+describe('label round trip', () => {
+  it('does not escape a label twice', () => {
+    // A label with brackets gets quoted on the way out. Reading it back and
+    // writing again used to leave `#quot;` in the drawing.
+    const source = graphToMermaid({
+      version: 1,
+      direction: 'LR',
+      nodes: [
+        { id: 'A', label: 'App', shape: 'rect' },
+        { id: 'B', label: 'DB', shape: 'cylinder' },
+      ],
+      edges: [{ from: 'A', to: 'B', label: 'SQL (migrations)', kind: 'sync', bidirectional: false }],
+      groups: [],
+    });
+
+    const once = mermaidToGraph(source);
+    const twice = mermaidToGraph(graphToMermaid(once));
+
+    expect(once.edges[0].label).toBe('SQL (migrations)');
+    expect(twice.edges[0].label).toBe('SQL (migrations)');
+    expect(graphToMermaid(twice)).not.toContain('#quot;');
+  });
+
+  it('keeps a hash in a label, which C# needs', () => {
+    const graph = mermaidToGraph(
+      graphToMermaid({
+        version: 1,
+        direction: 'LR',
+        nodes: [
+          { id: 'A', label: 'Service', shape: 'rect' },
+          { id: 'B', label: 'Core', shape: 'rect' },
+        ],
+        edges: [{ from: 'A', to: 'B', label: 'C# project reference', kind: 'sync', bidirectional: false }],
+        groups: [],
+      }),
+    );
+    expect(graph.edges[0].label).toBe('C# project reference');
+  });
+
+  it('peels every layer a previous build left behind', () => {
+    expect(unescapeLabel('"#quot;SQL (migrations)#quot;"')).toBe('SQL (migrations)');
+    expect(unescapeLabel('"plain"')).toBe('plain');
+    expect(unescapeLabel('plain')).toBe('plain');
+  });
+
+  it('restores the canonical spelling of a known service', () => {
+    expect(canonicalLabel('postgresql')).toBe('PostgreSQL');
+    expect(canonicalLabel('openai')).toBe('OpenAI');
+    // A name the author chose stays as written.
+    expect(canonicalLabel('Orders PostgreSQL')).toBe('Orders PostgreSQL');
+    expect(canonicalLabel('Matching Service')).toBe('Matching Service');
+  });
+
+  it('draws a store as a cylinder whatever shape the source used', () => {
+    // A model picks a shape inconsistently. Shape carries meaning, so code decides.
+    expect(shapeForLabel('Redis', 'hexagon')).toBe('cylinder');
+    expect(shapeForLabel('PostgreSQL', 'rect')).toBe('cylinder');
+    expect(shapeForLabel('Matching Service', 'rect')).toBe('rect');
+  });
+
+  it('corrects the shape when reading Mermaid back', () => {
+    const graph = mermaidToGraph('flowchart LR\n  A[App] --> Redis{{Redis}}');
+    expect(graph.nodes.find((n) => n.id === 'Redis')?.shape).toBe('cylinder');
   });
 });

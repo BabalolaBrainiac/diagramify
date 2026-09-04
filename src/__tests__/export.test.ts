@@ -285,3 +285,40 @@ describe('render pipeline formats', () => {
     expect(result.graph!.nodes.length).toBe(6);
   });
 });
+
+describe('tier boxes', () => {
+  it('encloses every node it holds', async () => {
+    const svg = await renderedSVG();
+    const graph = attachLayout(mermaidToGraph(SOURCE), svg);
+
+    // Read the box the renderer drew for each tier.
+    const boxes = new Map<string, { x: number; y: number; w: number; h: number }>();
+    const open = /<g\b[^>]*class="[^"]*\bsubgraph\b[^"]*"[^>]*>/g;
+    let match: RegExpExecArray | null;
+    while ((match = open.exec(svg)) !== null) {
+      const id = match[0].match(/\sdata-id="([^"]*)"/)?.[1];
+      if (!id) continue;
+      const rect = svg.slice(open.lastIndex, open.lastIndex + 4000).match(/<rect\b[^>]*>/);
+      if (!rect) continue;
+      const value = (name: string) => Number(rect[0].match(new RegExp(`\\s${name}="([^"]*)"`))?.[1]);
+      boxes.set(id, { x: value('x'), y: value('y'), w: value('width'), h: value('height') });
+    }
+
+    expect(boxes.size).toBeGreaterThan(0);
+
+    for (const group of graph.groups) {
+      const box = boxes.get(group.id);
+      if (!box) continue;
+      for (const id of group.nodeIds) {
+        const node = graph.nodes.find((n) => n.id === id);
+        if (!node?.layout) continue;
+        const { x, y, width, height } = node.layout;
+        // A node crossing its tier border reads as a broken diagram.
+        expect(x, `${id} left of ${group.id}`).toBeGreaterThanOrEqual(box.x - 1);
+        expect(y, `${id} above ${group.id}`).toBeGreaterThanOrEqual(box.y - 1);
+        expect(x + width, `${id} right of ${group.id}`).toBeLessThanOrEqual(box.x + box.w + 1);
+        expect(y + height, `${id} below ${group.id}`).toBeLessThanOrEqual(box.y + box.h + 1);
+      }
+    }
+  });
+});

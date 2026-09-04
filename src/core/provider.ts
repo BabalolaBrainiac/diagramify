@@ -42,6 +42,54 @@ function getApiKeyEnvVar(provider: ProviderName): string {
   return envMap[provider];
 }
 
+/** How long to wait for one model call before giving up. */
+const CALL_TIMEOUT_MS = Number(process.env.DIAGRAMIFY_TIMEOUT_MS ?? 120000);
+
+/** How many times to retry. The SDK default of 3 hides a quota error for minutes. */
+const MAX_RETRIES = Number(process.env.DIAGRAMIFY_MAX_RETRIES ?? 1);
+
+/**
+ * Rewrites a provider error into something a user can act on.
+ *
+ * A quota error used to surface as a wall of retries and a raw SDK message.
+ * The cause matters less than the next step, so the next step comes first.
+ */
+function describeCallFailure(error: unknown, modelId?: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  const named = modelId ? ` (${modelId})` : '';
+
+  if (/quota|rate.?limit|429|resource_exhausted/i.test(message)) {
+    return new Error(
+      `The provider refused the request because the quota for this key is used up${named}.\n` +
+        '  - Wait for the quota to reset, or use a key with a higher limit.\n' +
+        '  - Try a smaller model: --tier fast\n' +
+        '  - Pin a model with separate quota: --model <id>. Run "diagramify models --all" to list them.\n' +
+        '  - Build the diagram with no model at all: --no-llm',
+    );
+  }
+
+  if (/high demand|overload|503|unavailable/i.test(message)) {
+    return new Error(
+      `The model is busy${named}. Try again shortly, pick another with --model, or run --no-llm.`,
+    );
+  }
+
+  if (/abort|timeout/i.test(message)) {
+    return new Error(
+      `The model did not answer within ${Math.round(CALL_TIMEOUT_MS / 1000)}s${named}. ` +
+        'Raise DIAGRAMIFY_TIMEOUT_MS, choose a smaller model with --tier fast, or run --no-llm.',
+    );
+  }
+
+  if (/api key|unauthenticated|401|403|permission/i.test(message)) {
+    return new Error(
+      `The provider rejected the key${named}. Check that it is current and has access to this model.`,
+    );
+  }
+
+  return error instanceof Error ? error : new Error(message);
+}
+
 /** True for Gemini 2.5 models which use thinking tokens that eat into the output budget. */
 function isGeminiThinkingModel(model: LanguageModel): boolean {
   const id = (model as any).modelId as string | undefined;
@@ -61,14 +109,26 @@ export async function callLLM(
     ? { google: { thinkingConfig: { thinkingBudget: 0 } } }
     : undefined;
 
-  const result = await generateText({
-    model,
-    system: systemPrompt,
-    prompt: userPrompt,
-    temperature: temperature ?? 0.7,
-    maxOutputTokens: maxTokens,
-    ...(providerOptions ? { providerOptions } : {}),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CALL_TIMEOUT_MS);
+
+  let result;
+  try {
+    result = await generateText({
+      model,
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: temperature ?? 0.7,
+      maxOutputTokens: maxTokens,
+      maxRetries: MAX_RETRIES,
+      abortSignal: controller.signal,
+      ...(providerOptions ? { providerOptions } : {}),
+    });
+  } catch (error) {
+    throw describeCallFailure(error, (model as { modelId?: string }).modelId);
+  } finally {
+    clearTimeout(timer);
+  }
 
   return {
     text: result.text,
@@ -97,15 +157,27 @@ export async function callLLMForObject<T>(
     ? { google: { thinkingConfig: { thinkingBudget: 0 } } }
     : undefined;
 
-  const result = await generateObject({
-    model,
-    schema,
-    system: systemPrompt,
-    prompt: userPrompt,
-    temperature: temperature ?? 0.3,
-    maxOutputTokens: maxTokens,
-    ...(providerOptions ? { providerOptions } : {}),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CALL_TIMEOUT_MS);
+
+  let result;
+  try {
+    result = await generateObject({
+      model,
+      schema,
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: temperature ?? 0.3,
+      maxOutputTokens: maxTokens,
+      maxRetries: MAX_RETRIES,
+      abortSignal: controller.signal,
+      ...(providerOptions ? { providerOptions } : {}),
+    });
+  } catch (error) {
+    throw describeCallFailure(error, (model as { modelId?: string }).modelId);
+  } finally {
+    clearTimeout(timer);
+  }
 
   return {
     object: result.object as T,

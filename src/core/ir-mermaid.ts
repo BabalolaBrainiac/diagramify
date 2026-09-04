@@ -6,6 +6,8 @@
  */
 
 import {
+  canonicalLabel,
+  shapeForLabel,
   type ArchitectureGraph,
   type Direction,
   type IRNode,
@@ -38,6 +40,33 @@ export function escapeLabel(label: string): string {
     return `"${cleaned}"`;
   }
   return cleaned;
+}
+
+/**
+ * Reverses `escapeLabel`.
+ *
+ * Without this, reading Mermaid back and writing it again escapes the label a
+ * second time, and `#quot;` leaks into the drawing.
+ */
+export function unescapeLabel(label: string): string {
+  let value = label.trim();
+
+  // A file written by an older build can hold more than one layer of escaping,
+  // so peel until the value stops changing.
+  for (let guard = 0; guard < 8; guard += 1) {
+    const before = value;
+
+    if (value.length > 1 && value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1).trim();
+    }
+    value = value.replace(/#quot;/g, '"').trim();
+
+    if (value === before) {
+      break;
+    }
+  }
+
+  return value;
 }
 
 function renderNode(node: IRNode): string {
@@ -106,7 +135,7 @@ export function mermaidToGraph(source: string, title?: string): ArchitectureGrap
   const groupOf = new Map<string, string>();
   for (const subgraph of parsed.subgraphs) {
     const id = safeId(subgraph.id, 'g');
-    graph.groups.push({ id, label: subgraph.label, nodeIds: [] });
+    graph.groups.push({ id, label: unescapeLabel(subgraph.label), nodeIds: [] });
     for (const nodeId of subgraph.nodeIds) {
       groupOf.set(nodeId, id);
     }
@@ -114,10 +143,12 @@ export function mermaidToGraph(source: string, title?: string): ArchitectureGrap
 
   for (const node of parsed.nodes) {
     const groupId = groupOf.get(node.id);
+    const label = canonicalLabel(unescapeLabel(node.label || node.id));
     graph.nodes.push({
       id: node.id,
-      label: node.label || node.id,
-      shape: toIRShape(node.shape),
+      label,
+      // A store keeps its cylinder however the source drew it.
+      shape: shapeForLabel(label, toIRShape(node.shape)),
       groupId,
     });
     if (groupId) {
@@ -129,7 +160,7 @@ export function mermaidToGraph(source: string, title?: string): ArchitectureGrap
     graph.edges.push({
       from: edge.from,
       to: edge.to,
-      label: edge.label,
+      label: edge.label ? unescapeLabel(edge.label) : undefined,
       kind: edge.dashed ? 'async' : 'sync',
       bidirectional: edge.bidirectional,
     });

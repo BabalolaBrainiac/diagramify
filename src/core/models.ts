@@ -58,7 +58,20 @@ interface ProviderProbe {
 }
 
 /** Excludes a model that cannot take a prompt and return text. */
-const NON_TEXT = /embed|whisper|tts|audio|speech|image|imagen|veo|dall-?e|moderation|rerank|guard|transcri/i;
+const NON_TEXT =
+  /embed|whisper|tts|audio|speech|image|imagen|veo|dall-?e|moderation|rerank|guard|transcri|computer-use|robotics|realtime/i;
+
+/**
+ * A rolling alias such as `gemini-flash-latest` or `claude-sonnet-4-5`.
+ *
+ * The provider repoints these at its newest build, so an alias keeps working
+ * after this package stops being updated. That makes it the best default. It
+ * carries no version number, so it has to be ranked before the version test or
+ * it sorts to the bottom.
+ */
+function isAlias(id: string): boolean {
+  return /-latest$/i.test(id);
+}
 /** A build that a provider may withdraw without notice. */
 const UNSTABLE = /preview|experimental|-exp\b|-exp-|alpha|beta|nightly|\bdraft\b/i;
 
@@ -171,16 +184,22 @@ export function pickModel(
     id,
     inTier: probe.tier(id) === tier,
     stable: !UNSTABLE.test(id),
+    alias: isAlias(id),
     version: versionOf(id),
     snapshot: snapshotOf(id),
   }));
 
   scored.sort((a, b) => {
+    // The tier the caller asked for comes first.
     if (a.inTier !== b.inTier) return a.inTier ? -1 : 1;
+    // A build the provider may withdraw comes last.
     if (a.stable !== b.stable) return a.stable ? -1 : 1;
+    // A rolling alias tracks the provider's own upgrades, so it wins before any
+    // version is compared. It has no version number of its own.
+    if (a.alias !== b.alias) return a.alias ? -1 : 1;
     if (a.version !== b.version) return b.version - a.version;
-    // A name with no date is the rolling alias. It follows the provider's own
-    // upgrades, so it beats any single dated snapshot.
+    // Between two dated snapshots the newer wins, and an undated name wins over
+    // both, because it also follows the provider.
     const aDated = a.snapshot > 0;
     const bDated = b.snapshot > 0;
     if (aDated !== bDated) return aDated ? 1 : -1;

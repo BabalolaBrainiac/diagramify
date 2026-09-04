@@ -3,6 +3,7 @@ import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 import { generateInteractiveHTML } from './html.js';
 import { styleSVG } from './styling/renderer.js';
 import { flattenSVGColors } from './styling/flatten.js';
+import { fitSubgraphBoxes } from './styling/subgraph-fit.js';
 import { svgToPDF } from './export/pdf.js';
 import { graphToDrawio, graphToExcalidraw } from './export/editable.js';
 import { mermaidToGraph } from './ir-mermaid.js';
@@ -115,6 +116,7 @@ function renderSVG(
   theme?: string,
   darkMode: boolean = false,
   backgroundColor?: string,
+  membership?: Map<string, string[]>,
 ): string {
   const themeConfig = theme && theme in THEMES ? THEMES[theme as keyof typeof THEMES] : undefined;
 
@@ -124,6 +126,13 @@ function renderSVG(
 
     const diagramTheme = getTheme(theme, darkMode ? 'dark' : 'light');
     svg = styleSVG(svg, diagramTheme);
+
+    // A tier box can end a few pixels short of the nodes it holds, which reads
+    // as a broken diagram. Grow the box rather than move the nodes.
+    if (membership && membership.size > 0) {
+      svg = fitSubgraphBoxes(svg, membership);
+    }
+
     svg = injectBackgroundRect(svg, resolveBackground(theme, darkMode, backgroundColor));
 
     // A rasterizer, and many SVG editors, cannot read `var()` or `color-mix()`.
@@ -183,6 +192,18 @@ export async function renderDiagram(
 
   let layoutSVG: string | undefined;
 
+  // Which nodes belong to which tier. The subgraph fitter needs this, and the
+  // Mermaid source already states it.
+  const membership = new Map<string, string[]>();
+  try {
+    const parsed = options.graph ?? mermaidToGraph(mermaidSource, options.title);
+    for (const group of parsed.groups) {
+      membership.set(group.id, group.nodeIds);
+    }
+  } catch {
+    // A source the parser cannot read still renders. It just skips the fitting.
+  }
+
   if (needsSVG || needsGraph) {
     try {
       const rawSVG = renderMermaidSVG(mermaidSource);
@@ -206,6 +227,7 @@ export async function renderDiagram(
           options.theme,
           options.darkMode ?? false,
           options.backgroundColor,
+          membership,
         );
         if (wantsSVGFile) {
           result.svg = layoutSVG;
@@ -243,7 +265,13 @@ export async function renderDiagram(
 
   if (formats.includes('pdf')) {
     if (!layoutSVG) {
-      layoutSVG = renderSVG(mermaidSource, options.theme, options.darkMode ?? false, options.backgroundColor);
+      layoutSVG = renderSVG(
+        mermaidSource,
+        options.theme,
+        options.darkMode ?? false,
+        options.backgroundColor,
+        membership,
+      );
     }
     try {
       result.pdf = svgToPDF(layoutSVG, {
