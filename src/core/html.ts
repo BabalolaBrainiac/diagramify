@@ -1,6 +1,8 @@
 import type { RenderOptions } from './types.js';
 import { getServiceDefinition } from '../icons/services.js';
 import { getIconURL, getFallbackSVG } from '../icons/simple-icons.js';
+import { mermaidToGraph } from './ir-mermaid.js';
+import type { ArchitectureGraph } from './ir.js';
 
 export interface HTMLGeneratorOptions extends RenderOptions {
   showMinimap?: boolean;
@@ -202,6 +204,22 @@ export function generateInteractiveHTML(
   // Serialize layout data for the client script
   const NODE_DATA = layout.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, w: n.width, h: n.height }));
   const EDGE_DATA = layout.edges.map((e) => ({ from: e.from, to: e.to, label: e.label ?? '', dashed: e.dashed }));
+
+  // The graph a canvas edit applies to, so a renamed label or a dragged
+  // node can be exported back out as an updated source file. The `generate`
+  // pipeline already built this graph and passes it in; anything else (a
+  // hand-authored .mmd rendered directly) gets it by parsing the same
+  // Mermaid text that produced the diagram.
+  let editableGraph: ArchitectureGraph | null = options.graph ?? null;
+  if (!editableGraph) {
+    try {
+      editableGraph = mermaidToGraph(mermaidSource, options.title);
+    } catch {
+      // A source the parser cannot read still renders (see extractFromSVG
+      // above); it only loses the "export edited source" feature.
+      editableGraph = null;
+    }
+  }
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="${initialTheme}">
@@ -431,6 +449,8 @@ ${fontImport}
           <option value="svg">SVG</option>
           <option value="jpeg">JPEG</option>
           <option value="mmd">Mermaid (.mmd)</option>
+          ${editableGraph ? '<option value="mmd-live">Mermaid — with edits (.mmd)</option>' : ''}
+          ${editableGraph ? '<option value="ir-live">Architecture IR — with edits (.json)</option>' : ''}
           <option value="png:light">PNG - light</option>
           <option value="png:dark">PNG - dark</option>
           <option value="jpeg:light">JPEG - light</option>
@@ -517,6 +537,7 @@ ${fontImport}
     const EDGES = ${serializeForScript(EDGE_DATA)};
     const VIEWBOX = ${serializeForScript(layout.viewBox)};
     const MERMAID_SRC = ${serializeForScript(mermaidSource)};
+    const IR_GRAPH = ${serializeForScript(editableGraph)};
     const TITLE_SAFE = ${serializeForScript(title.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'diagram')};
     const canvas = document.getElementById('canvas');
     const edgesGroup = document.getElementById('edges-group');
@@ -1708,6 +1729,88 @@ ${fontImport}
       printWindow.print();
       setTimeout(removeFrame, 60000);
     }
+    // ─── Export edited source (positions + renamed labels) ────────────────────
+    // Mirrors ir-mermaid.ts's graphToMermaid so a canvas edit can be written
+    // back out, with no server and no build step in the browser.
+    var MERMAID_NL = String.fromCharCode(10);
+    var SHAPE_WRAPPERS_LIVE = { rect: ['[', ']'], round: ['(', ')'], stadium: ['([', '])'], cylinder: ['[(', ')]'], circle: ['((', '))'], diamond: ['{', '}'], hexagon: ['{{', '}}'] };
+    function escapeLabelForMermaid(label) {
+      var cleaned = label.replace(/"/g, '#quot;').trim();
+      if (/[[\\]{}()<>|"#]/.test(label)) return '"' + cleaned + '"';
+      return cleaned;
+    }
+    function renderNodeForMermaid(node) {
+      var wrap = SHAPE_WRAPPERS_LIVE[node.shape] || SHAPE_WRAPPERS_LIVE.rect;
+      return node.id + wrap[0] + escapeLabelForMermaid(node.label) + wrap[1];
+    }
+    function graphToMermaidLive(graph) {
+      var lines = ['%%{init: {"flowchart": {"nodeSpacing": 40, "rankSpacing": 70, "curve": "basis"}}}%%'];
+      lines.push('flowchart ' + graph.direction);
+      var grouped = {};
+      graph.groups.forEach(function (group) {
+        var members = group.nodeIds.map(function (id) {
+          return graph.nodes.find(function (n) { return n.id === id; });
+        }).filter(Boolean);
+        if (!members.length) return;
+        lines.push('    subgraph ' + group.id + ' [' + escapeLabelForMermaid(group.label) + ']');
+        members.forEach(function (node) { lines.push('        ' + renderNodeForMermaid(node)); grouped[node.id] = true; });
+        lines.push('    end');
+      });
+      graph.nodes.forEach(function (node) { if (!grouped[node.id]) lines.push('    ' + renderNodeForMermaid(node)); });
+      graph.edges.forEach(function (edge) {
+        var connector = edge.kind === 'async' ? '-.->' : '-->';
+        var label = edge.label ? ('|' + escapeLabelForMermaid(edge.label) + '|') : '';
+        lines.push('    ' + edge.from + ' ' + connector + label + ' ' + edge.to);
+      });
+      return lines.join(MERMAID_NL);
+    }
+    // Reads the live canvas back onto a copy of the graph the diagram was
+    // built from: renamed labels and dragged positions. Hidden nodes stay in
+    // (Hide is a reversible view filter, not a deletion); adding or removing
+    // nodes and edges is not persisted by this export.
+    function buildEditedGraph() {
+      if (!IR_GRAPH) return null;
+      var graph = JSON.parse(JSON.stringify(IR_GRAPH));
+      var nodeById = {};
+      graph.nodes.forEach(function (n) { nodeById[n.id] = n; });
+      document.querySelectorAll('.dfy-node').forEach(function (el) {
+        var id = el.dataset.nodeId || el.dataset.id;
+        var node = nodeById[id];
+        if (!node) return;
+        var labelEl = el.querySelector('.dfy-label');
+        if (labelEl) {
+          var text = labelEl.textContent.trim();
+          if (text) node.label = text;
+        }
+        var cx = parseFloat(el.dataset.cx), cy = parseFloat(el.dataset.cy);
+        if (!Number.isNaN(cx) && !Number.isNaN(cy)) {
+          var w = (node.layout && node.layout.width) || el.offsetWidth || 0;
+          var h = (node.layout && node.layout.height) || el.offsetHeight || 0;
+          node.layout = { x: cx - w / 2, y: cy - h / 2, width: w, height: h };
+        }
+      });
+      document.querySelectorAll('.dfy-subgraph').forEach(function (el) {
+        var id = el.dataset.id;
+        var group = graph.groups.find(function (g) { return g.id === id; });
+        if (!group) return;
+        var labelEl = el.querySelector('.dfy-subgraph-label');
+        if (labelEl) {
+          var text = labelEl.textContent.trim();
+          if (text) group.label = text;
+        }
+      });
+      return graph;
+    }
+    function exportEditedMermaid() {
+      var graph = buildEditedGraph();
+      if (!graph) { download(TITLE_SAFE + '.mmd', MERMAID_SRC, 'text/plain'); return; }
+      download(TITLE_SAFE + '.mmd', graphToMermaidLive(graph), 'text/plain');
+    }
+    function exportEditedIR() {
+      var graph = buildEditedGraph();
+      if (!graph) return;
+      download(TITLE_SAFE + '.diagramify.json', JSON.stringify(graph, null, 2), 'application/json');
+    }
     document.getElementById('format-select').addEventListener('change', async e => {
       const fmt = e.target.value;
       e.target.value = '';
@@ -1727,6 +1830,8 @@ ${fontImport}
         else if (kind === 'svg') exportSVG(wanted);
         else if (kind === 'pdf') exportPDF(wanted);
         else if (kind === 'mmd') download(TITLE_SAFE + '.mmd', MERMAID_SRC, 'text/plain');
+        else if (kind === 'mmd-live') exportEditedMermaid();
+        else if (kind === 'ir-live') exportEditedIR();
       } catch (err) {
         console.error('Export failed', err);
       } finally {
