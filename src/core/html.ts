@@ -189,7 +189,7 @@ function renderNodeCard(node: LayoutNode, offline = false): string {
   return `<div class="dfy-node service-${info.type}" data-id="${escapeHTML(node.id)}" data-node-id="${escapeHTML(node.id)}" data-label="${escapeHTML(node.label)}" data-type="${escapeHTML(info.type)}" data-cx="${cx}" data-cy="${cy}"
     style="--brand:${info.color};--brand-bg:${info.bgColor};">
     <div class="dfy-icon${contrastClass}">${iconHTML}</div>
-    <div class="dfy-label-wrap"><div class="dfy-label">${escapeHTML(node.label)}</div></div>
+    <div class="dfy-label-wrap"><div class="dfy-label" title="${escapeHTML(node.label)}">${escapeHTML(node.label)}</div></div>
   </div>`;
 }
 
@@ -308,6 +308,7 @@ ${fontImport}
     .pill{padding:3px 10px;border-radius:99px;font-size:11px;font-weight:500;background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text-muted);}
     .pill.active{background:var(--edge-color-active);color:white;}
     .btn-group{display:flex;gap:4px;align-items:center;}
+    .btn-divider{width:1px;align-self:stretch;background:color-mix(in srgb,var(--text) 12%,transparent);margin:0 2px;}
     button,select{padding:6px 12px;background:transparent;border:1px solid color-mix(in srgb,var(--text) 15%,transparent);color:var(--text);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit;transition:all 0.15s;}
     button:hover,select:hover{background:color-mix(in srgb,var(--text) 8%,transparent);border-color:color-mix(in srgb,var(--text) 25%,transparent);}
     button.primary{background:var(--edge-color-active);border-color:var(--edge-color-active);color:white;}
@@ -315,12 +316,18 @@ ${fontImport}
     button:disabled{opacity:0.4;cursor:not-allowed;}
     select{padding-right:26px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;}
     .main{flex:1;display:flex;min-height:0;}
-    .sidebar{width:220px;background:var(--surface);border-right:1px solid color-mix(in srgb,var(--text) 8%,transparent);padding:14px;overflow-y:auto;flex-shrink:0;transition:width 0.2s,padding 0.2s,opacity 0.15s;}
+    .sidebar{width:220px;background:var(--surface);border-right:1px solid color-mix(in srgb,var(--text) 8%,transparent);padding:14px;overflow-y:auto;flex-shrink:0;position:relative;transition:width 0.2s,padding 0.2s,opacity 0.15s;}
+    .sidebar.resizing{transition:none;}
     .sidebar.collapsed{width:0;padding:14px 0;opacity:0;overflow:hidden;}
     .sidebar h3{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;margin-top:4px;}
     .sidebar h3:not(:first-child){margin-top:18px;}
-    .legend-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;font-size:12px;}
+    .sidebar-resize{width:6px;flex-shrink:0;position:relative;cursor:col-resize;background:transparent;transition:background 0.15s;}
+    .sidebar-resize:hover{background:color-mix(in srgb,var(--edge-color-active) 30%,transparent);}
+    #sidebar-collapse-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:18px;height:34px;padding:0;margin:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;background:var(--surface);border:1px solid color-mix(in srgb,var(--text) 15%,transparent);box-shadow:var(--panel-shadow);color:var(--text-muted);z-index:15;}
+    #sidebar-collapse-btn:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 30%,transparent);}
+    .legend-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;font-size:12px;transition:background 0.12s,opacity 0.12s;}
     .legend-item:hover{background:color-mix(in srgb,var(--text) 5%,transparent);}
+    .legend-item.legend-item-active{background:color-mix(in srgb,var(--edge-color-active) 14%,transparent);}
     .legend-swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0;border:1px solid color-mix(in srgb,var(--text) 20%,transparent);}
     .legend-line{width:22px;height:0;flex-shrink:0;border-top:2px solid var(--edge-color);}
     .legend-line.dashed{border-top-style:dashed;}
@@ -366,7 +373,7 @@ ${fontImport}
     body.edit-mode .dfy-label:hover{outline:1px dashed var(--edge-color-active);border-radius:2px;}
     .dfy-label[contenteditable="true"]{outline:2px solid var(--edge-color-active);cursor:text;background:var(--bg);padding:1px 4px;border-radius:3px;white-space:normal;pointer-events:auto;}
     .dfy-badge{display:none;}
-    .dfy-node.dimmed{opacity:0.18;filter:grayscale(100%);transition:opacity 0.3s,filter 0.3s;}
+    .dfy-node.dimmed,.dfy-node.edge-dimmed{opacity:0.18;filter:grayscale(100%);transition:opacity 0.3s,filter 0.3s;}
     html[data-theme="dark"] .dfy-node,html[data-theme="tokyo-night"] .dfy-node,html[data-theme="nord"] .dfy-node,html[data-theme="catppuccin"] .dfy-node{border-color:color-mix(in srgb,var(--brand) 40%,transparent);border-left:3px solid var(--brand);}
     html[data-theme="dark"] .dfy-label,html[data-theme="tokyo-night"] .dfy-label,html[data-theme="nord"] .dfy-label,html[data-theme="catppuccin"] .dfy-label{color:var(--text);}
     .footer-tip{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:var(--surface);padding:8px 14px;border-radius:8px;box-shadow:var(--panel-shadow);font-size:11px;color:var(--text-muted);display:flex;gap:12px;align-items:center;z-index:30;}
@@ -376,18 +383,63 @@ ${fontImport}
       padding: 16px;
       border-bottom: 1px solid var(--subgraph-border);
     }
+    .dfy-search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .dfy-search-icon {
+      position: absolute;
+      left: 10px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
     .dfy-search-wrap input {
       width: 100%;
-      padding: 8px 12px;
+      padding: 8px 30px;
       border: 1px solid var(--subgraph-border);
       border-radius: 6px;
       background: var(--bg);
       color: var(--text);
       outline: none;
       font-family: inherit;
+      font-size: 12px;
+    }
+    .dfy-search-wrap input::-webkit-search-cancel-button {
+      display: none;
     }
     .dfy-search-wrap input:focus {
       border-color: var(--edge-color-active);
+    }
+    .dfy-search-clear {
+      position: absolute;
+      right: 4px;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1;
+      border-radius: 4px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s;
+    }
+    .dfy-search-clear.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .dfy-search-clear:hover {
+      background: color-mix(in srgb, var(--text) 10%, transparent);
+      color: var(--text);
+    }
+    mark.dfy-search-hit {
+      background: color-mix(in srgb, var(--edge-color-active) 35%, transparent);
+      color: inherit;
+      border-radius: 2px;
+      padding: 0 1px;
     }
     .dfy-detail-panel {
       position: fixed;
@@ -483,6 +535,7 @@ ${fontImport}
         <button id="edit-btn" title="Edit labels (E)">Edit</button>
         <button id="theme-btn" title="Cycle theme (T)">Theme</button>
         <button id="layout-btn" title="Reset layout to original (Alt+R)">Auto-layout</button>
+        <span class="btn-divider"></span>
         <select id="format-select" title="Export">
           <option value="">Export…</option>
           <optgroup label="Image">
@@ -514,7 +567,11 @@ ${fontImport}
     <div class="main">
       <aside class="sidebar" id="sidebar">
         ${options.showSearch !== false ? `<div class="dfy-search-wrap">
-          <input id="dfy-search" type="search" placeholder="Search nodes... (/)" />
+          <div class="dfy-search-box">
+            <svg class="dfy-search-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <input id="dfy-search" type="search" placeholder="Search nodes or type... (/)" />
+            <button id="dfy-search-clear" class="dfy-search-clear" type="button" title="Clear search (Esc)" aria-label="Clear search">&times;</button>
+          </div>
         </div>` : ''}
         <h3>Service Types</h3>
         ${legendHTML}
@@ -524,10 +581,13 @@ ${fontImport}
         ${options.showLayerPanel !== false ? `<h3>Layers</h3>
         <div id="layer-list" style="font-size:12px;"></div>` : ''}
         <h3>Interactions</h3>
-        <div class="legend-item"><span class="legend-label">Click Legend</span><span class="legend-detail">highlight nodes</span></div>
+        <div class="legend-item"><span class="legend-label">Click Legend</span><span class="legend-detail">toggle type filter</span></div>
         <div class="legend-item"><span class="legend-label">Drag</span><span class="legend-detail">card → reposition</span></div>
         <div class="legend-item"><span class="legend-label">Edit mode</span><span class="legend-detail">click label</span></div>
       </aside>
+      <div class="sidebar-resize" id="sidebar-resize">
+        <button id="sidebar-collapse-btn" type="button" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
+      </div>
       <div class="canvas-wrap" id="canvas-wrap">
         <div class="canvas" id="canvas">
           ${subgraphsHTML}
@@ -948,14 +1008,17 @@ ${fontImport}
           svg.classList.add('has-active');
           selectElement(group);
           
-          // Highlight the two connected nodes, dim the rest
+          // Highlight the two connected nodes, dim the rest. Its own class,
+          // separate from the search/legend "dimmed" state, so an edge
+          // selection and an active type filter don't fight over the same
+          // flag and silently cancel each other out.
           const fromNode = cardMap[e.from];
           const toNode = cardMap[e.to];
           document.querySelectorAll('.dfy-node').forEach(n => {
             if (n === fromNode || n === toNode) {
-              n.classList.remove('dimmed');
+              n.classList.remove('edge-dimmed');
             } else {
-              n.classList.add('dimmed');
+              n.classList.add('edge-dimmed');
             }
           });
         });
@@ -989,9 +1052,7 @@ ${fontImport}
     canvas.addEventListener('click', () => {
        document.querySelectorAll('.edge-group').forEach(g => g.classList.remove('active'));
        svg.classList.remove('has-active');
-       if (!activeLegendType) {
-          document.querySelectorAll('.dfy-node').forEach(n => n.classList.remove('dimmed'));
-       }
+       document.querySelectorAll('.dfy-node').forEach(n => n.classList.remove('edge-dimmed'));
        selectElement(null);
     });
     drawEdgesImmediate();
@@ -1546,10 +1607,54 @@ ${fontImport}
     } catch {}
     // Sidebar
     const sidebar = document.getElementById('sidebar');
-    document.getElementById('legend-btn').addEventListener('click', () => {
-      sidebar.classList.toggle('collapsed');
+    const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
+    function toggleSidebar() {
+      const collapsed = sidebar.classList.toggle('collapsed');
+      if (sidebarCollapseBtn) {
+        sidebarCollapseBtn.textContent = collapsed ? '\u203a' : '\u2039';
+        sidebarCollapseBtn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+      }
       setTimeout(drawEdges, 220);
-    });
+    }
+    document.getElementById('legend-btn').addEventListener('click', toggleSidebar);
+    if (sidebarCollapseBtn) sidebarCollapseBtn.addEventListener('click', toggleSidebar);
+
+    // Sidebar resize -- drag the handle between the sidebar and the canvas.
+    // Width is clamped and remembered per-browser, the same way the theme is.
+    const sidebarResize = document.getElementById('sidebar-resize');
+    const SIDEBAR_MIN_WIDTH = 180, SIDEBAR_MAX_WIDTH = 420;
+    function setSidebarWidth(px) {
+      const clamped = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, px));
+      sidebar.style.width = clamped + 'px';
+      try { localStorage.setItem('dfy-sidebar-width', String(clamped)); } catch {}
+    }
+    try {
+      const savedWidth = parseFloat(localStorage.getItem('dfy-sidebar-width'));
+      if (!isNaN(savedWidth)) setSidebarWidth(savedWidth);
+    } catch {}
+    if (sidebarResize) {
+      let resizingSidebar = false;
+      sidebarResize.addEventListener('pointerdown', e => {
+        if (e.target.closest('#sidebar-collapse-btn') || sidebar.classList.contains('collapsed')) return;
+        resizingSidebar = true;
+        sidebar.classList.add('resizing');
+        sidebarResize.setPointerCapture(e.pointerId);
+      });
+      sidebarResize.addEventListener('pointermove', e => {
+        if (!resizingSidebar) return;
+        const rect = sidebar.getBoundingClientRect();
+        setSidebarWidth(e.clientX - rect.left);
+      });
+      const endSidebarResize = e => {
+        if (!resizingSidebar) return;
+        resizingSidebar = false;
+        sidebar.classList.remove('resizing');
+        try { sidebarResize.releasePointerCapture(e.pointerId); } catch {}
+        drawEdges();
+      };
+      sidebarResize.addEventListener('pointerup', endSidebarResize);
+      sidebarResize.addEventListener('pointercancel', endSidebarResize);
+    }
 
     // Edges Toggle
     const edgesBtn = document.getElementById('edges-btn');
@@ -1561,34 +1666,110 @@ ${fontImport}
       edgesBtn.classList.toggle('primary', !edgesVisible);
     });
 
-    // Legend Highlighting
-    let activeLegendType = null;
+    // ─── Search + legend type filters ─────────────────────────────────────
+    // Both used to write straight to node styles/classes and could stomp on
+    // each other -- search set inline opacity while the legend toggled a
+    // class, so searching while a legend filter was active gave
+    // inconsistent results. They now share one function that recomputes
+    // which nodes are de-emphasized from whichever combination is active,
+    // and the legend supports selecting more than one type at once instead
+    // of only ever highlighting a single type.
+    const activeLegendTypes = new Set();
+    let searchQuery = '';
+    const TYPE_LABELS = {};
     document.querySelectorAll('.legend-item[data-type]').forEach(item => {
+      const t = item.getAttribute('data-type');
+      const labelSpan = item.querySelector('.legend-label');
+      if (t && labelSpan) TYPE_LABELS[t] = labelSpan.textContent;
+    });
+
+    function escHtml(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;');
+    }
+
+    // A contiguous substring match is preferred and highlighted as one run;
+    // failing that, characters matched out of order across the label (a
+    // command-palette-style fuzzy match) still count, each highlighted on
+    // its own. Returns null for no match, else the matched indices into text.
+    function fuzzyMatch(query, text) {
+      if (!query) return [];
+      const q = query.toLowerCase();
+      const t = text.toLowerCase();
+      const idx = t.indexOf(q);
+      if (idx !== -1) {
+        const run = [];
+        for (let i = 0; i < q.length; i++) run.push(idx + i);
+        return run;
+      }
+      const positions = [];
+      let qi = 0;
+      for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+        if (t[ti] === q[qi]) { positions.push(ti); qi++; }
+      }
+      return qi === q.length ? positions : null;
+    }
+
+    function highlightLabel(text, positions) {
+      if (!positions || !positions.length) return escHtml(text);
+      let out = '';
+      let pi = 0;
+      for (let i = 0; i < text.length; i++) {
+        const hit = pi < positions.length && positions[pi] === i;
+        if (hit) pi++;
+        out += hit ? ('<mark class="dfy-search-hit">' + escHtml(text[i]) + '</mark>') : escHtml(text[i]);
+      }
+      return out;
+    }
+
+    function updateNodeEmphasis() {
+      const hasTypeFilter = activeLegendTypes.size > 0;
+      const q = searchQuery.trim().toLowerCase();
+      const hasSearch = q.length > 0;
+
+      document.querySelectorAll('.dfy-node').forEach(node => {
+        const type = node.dataset.type;
+        const typeOk = !hasTypeFilter || activeLegendTypes.has(type);
+
+        let searchOk = true;
+        const labelEl = node.querySelector('.dfy-label');
+        const editingLabel = labelEl && document.activeElement === labelEl;
+        if (hasSearch && labelEl) {
+          const text = labelEl.textContent;
+          const positions = fuzzyMatch(q, text);
+          // Typing a service type's name filters by type even when the
+          // query isn't literally in the label -- "auth" surfaces every
+          // Auth0/Kinde-style node whether or not "auth" is in its name.
+          const typeLabel = (TYPE_LABELS[type] || '').toLowerCase();
+          const typeNameMatch = !!type && (type.indexOf(q) === 0 || typeLabel.indexOf(q) === 0);
+          searchOk = positions !== null || typeNameMatch;
+          if (!editingLabel) labelEl.innerHTML = positions ? highlightLabel(text, positions) : escHtml(text);
+        } else if (labelEl && !editingLabel) {
+          const plain = escHtml(labelEl.textContent);
+          if (labelEl.innerHTML !== plain) labelEl.innerHTML = plain;
+        }
+
+        node.classList.toggle('dimmed', !(typeOk && searchOk));
+      });
+
+      document.querySelectorAll('.legend-item[data-type]').forEach(item => {
+        const active = activeLegendTypes.has(item.getAttribute('data-type'));
+        item.classList.toggle('legend-item-active', active);
+        item.style.opacity = (!hasTypeFilter || active) ? '1' : '0.5';
+      });
+    }
+
+    // Legend: click toggles that type in/out of the active filter set, so
+    // several types can be highlighted together instead of just one at a
+    // time.
+    document.querySelectorAll('.legend-item[data-type]').forEach(item => {
+      item.style.cursor = 'pointer';
       item.addEventListener('click', () => {
         const type = item.getAttribute('data-type');
-        if (activeLegendType === type) {
-          activeLegendType = null;
-          document.querySelectorAll('.dfy-node').forEach(n => n.classList.remove('dimmed'));
-          document.querySelectorAll('.legend-item').forEach(l => l.style.opacity = '1');
-        } else {
-          activeLegendType = type;
-          document.querySelectorAll('.dfy-node').forEach(n => {
-            if (n.getAttribute('data-type') === type) {
-              n.classList.remove('dimmed');
-            } else {
-              n.classList.add('dimmed');
-            }
-          });
-          document.querySelectorAll('.legend-item[data-type]').forEach(l => {
-            if (l.getAttribute('data-type') === type) {
-              l.style.opacity = '1';
-            } else {
-              l.style.opacity = '0.5';
-            }
-          });
-        }
+        if (activeLegendTypes.has(type)) activeLegendTypes.delete(type);
+        else activeLegendTypes.add(type);
+        updateNodeEmphasis();
       });
-      item.style.cursor = 'pointer';
     });
     // Reset
     document.getElementById('reset-btn').addEventListener('click', () => {
@@ -1930,16 +2111,14 @@ ${fontImport}
     });
     // Search Input
     const searchInput = document.getElementById('dfy-search');
+    const searchClearBtn = document.getElementById('dfy-search-clear');
+    function setSearchQuery(value) {
+      searchQuery = value;
+      if (searchClearBtn) searchClearBtn.classList.toggle('visible', value.length > 0);
+      updateNodeEmphasis();
+    }
     if (searchInput) {
-      searchInput.addEventListener('input', e => {
-        const q = e.target.value.toLowerCase().trim();
-        document.querySelectorAll('.dfy-node').forEach(node => {
-          const label = node.dataset.label?.toLowerCase() || '';
-          const matches = !q || label.includes(q);
-          node.style.opacity = matches ? '1' : '0.15';
-          node.style.outline = matches && q ? '2px solid #3b82f6' : '';
-        });
-      });
+      searchInput.addEventListener('input', e => setSearchQuery(e.target.value));
       document.addEventListener('keydown', e => {
         if (e.key === '/' && document.activeElement !== searchInput) {
           e.preventDefault();
@@ -1947,8 +2126,14 @@ ${fontImport}
         }
         if (e.key === 'Escape' && document.activeElement === searchInput) {
           searchInput.value = '';
-          searchInput.dispatchEvent(new Event('input'));
+          setSearchQuery('');
         }
+      });
+    }
+    if (searchClearBtn) {
+      searchClearBtn.addEventListener('click', () => {
+        if (searchInput) { searchInput.value = ''; searchInput.focus(); }
+        setSearchQuery('');
       });
     }
 
