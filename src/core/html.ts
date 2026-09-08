@@ -129,6 +129,42 @@ function getServiceInfo(label: string): ServiceInfo {
   return { type: 'other', color: '#94a3b8', bgColor: '#f5f5f5' };
 }
 
+// Every ServiceType the analyzer can assign, in the order the legend shows
+// them. A generated diagram only ever uses a handful of these types, so the
+// sidebar renders just the rows that are actually present (see
+// renderLegendItems) instead of a fixed list that used to mix in types
+// unrelated to the codebase and, at the same time, silently omit others --
+// 'analytics', 'security' and 'ml' are real service types with no legend
+// row at all, so nodes of those types could never be highlighted by
+// clicking the legend.
+const LEGEND_ITEMS: Array<{ type: string; swatch: string; label: string; detail: string }> = [
+  { type: 'compute', swatch: '#ff9900', label: 'Compute', detail: 'Lambda' },
+  { type: 'database', swatch: '#336791', label: 'Database', detail: 'Postgres' },
+  { type: 'cache', swatch: '#dc382d', label: 'Cache', detail: 'Redis' },
+  { type: 'messaging', swatch: '#231f20', label: 'Messaging', detail: 'Kafka' },
+  { type: 'storage', swatch: '#569a31', label: 'Storage', detail: 'S3' },
+  { type: 'monitoring', swatch: '#e6522c', label: 'Monitoring', detail: 'Prometheus' },
+  { type: 'devops', swatch: '#2496ed', label: 'DevOps', detail: 'Docker' },
+  { type: 'network', swatch: '#8c4fff', label: 'Network', detail: 'CloudFront' },
+  { type: 'auth', swatch: '#eb5424', label: 'Auth', detail: 'Auth0' },
+  { type: 'ai', swatch: '#d97757', label: 'AI', detail: 'Anthropic' },
+  { type: 'ml', swatch: '#a855f7', label: 'ML', detail: 'PyTorch' },
+  { type: 'ui', swatch: '#61dafb', label: 'UI', detail: 'React' },
+  { type: 'middleware', swatch: '#339933', label: 'Middleware', detail: 'Node.js' },
+  { type: 'analytics', swatch: '#f59e0b', label: 'Analytics', detail: 'PostHog' },
+  { type: 'security', swatch: '#ef4444', label: 'Security', detail: 'WAF / IAM' },
+  { type: 'other', swatch: '#94a3b8', label: 'Other', detail: 'Unclassified' },
+];
+
+function renderLegendItems(presentTypes: Set<string>): string {
+  return LEGEND_ITEMS.filter((item) => presentTypes.has(item.type))
+    .map(
+      (item) =>
+        `<div class="legend-item" data-type="${item.type}"><span class="legend-swatch" style="background:${item.swatch}"></span><span class="legend-label">${escapeHTML(item.label)}</span><span class="legend-detail">${escapeHTML(item.detail)}</span></div>`,
+    )
+    .join('\n        ');
+}
+
 function needsDarkThemeContrast(color: string): boolean {
   const value = color.replace('#', '');
   if (!/^[0-9a-f]{6}$/i.test(value)) return false;
@@ -197,6 +233,10 @@ export function generateInteractiveHTML(
   const nodeCardsHTML = layout.nodes
     .map((node) => renderNodeCard(node, options.offlineMode === true))
     .join('\n');
+
+  // Legend rows for just the service types this diagram actually contains.
+  const presentServiceTypes = new Set(layout.nodes.map((node) => getServiceInfo(node.label).type));
+  const legendHTML = renderLegendItems(presentServiceTypes);
 
   const canvasW = layout.viewBox.w + 40;
   const canvasH = layout.viewBox.h + 40;
@@ -329,7 +369,7 @@ ${fontImport}
     .dfy-node.dimmed{opacity:0.18;filter:grayscale(100%);transition:opacity 0.3s,filter 0.3s;}
     html[data-theme="dark"] .dfy-node,html[data-theme="tokyo-night"] .dfy-node,html[data-theme="nord"] .dfy-node,html[data-theme="catppuccin"] .dfy-node{border-color:color-mix(in srgb,var(--brand) 40%,transparent);border-left:3px solid var(--brand);}
     html[data-theme="dark"] .dfy-label,html[data-theme="tokyo-night"] .dfy-label,html[data-theme="nord"] .dfy-label,html[data-theme="catppuccin"] .dfy-label{color:var(--text);}
-    .footer-tip{position:absolute;bottom:16px;right:20px;background:var(--surface);padding:8px 14px;border-radius:8px;box-shadow:var(--panel-shadow);font-size:11px;color:var(--text-muted);display:flex;gap:12px;align-items:center;z-index:30;}
+    .footer-tip{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:var(--surface);padding:8px 14px;border-radius:8px;box-shadow:var(--panel-shadow);font-size:11px;color:var(--text-muted);display:flex;gap:12px;align-items:center;z-index:30;}
     kbd{padding:1px 6px;border-radius:3px;background:color-mix(in srgb,var(--text) 12%,transparent);font-family:inherit;font-size:10px;font-weight:600;color:var(--text);}
   
     .dfy-search-wrap {
@@ -445,20 +485,28 @@ ${fontImport}
         <button id="layout-btn" title="Reset layout to original (Alt+R)">Auto-layout</button>
         <select id="format-select" title="Export">
           <option value="">Export…</option>
-          <option value="png">PNG (4×)</option>
-          <option value="svg">SVG</option>
-          <option value="jpeg">JPEG</option>
-          <option value="mmd">Mermaid (.mmd)</option>
-          ${editableGraph ? '<option value="mmd-live">Mermaid — with edits (.mmd)</option>' : ''}
-          ${editableGraph ? '<option value="ir-live">Architecture IR — with edits (.json)</option>' : ''}
-          <option value="png:light">PNG - light</option>
-          <option value="png:dark">PNG - dark</option>
-          <option value="jpeg:light">JPEG - light</option>
-          <option value="jpeg:dark">JPEG - dark</option>
-          <option value="svg:light">SVG - light</option>
-          <option value="svg:dark">SVG - dark</option>
-          <option value="pdf:light">PDF - light</option>
-          <option value="pdf:dark">PDF - dark</option>
+          <optgroup label="Image">
+            <option value="png">PNG (4×)</option>
+            <option value="svg">SVG</option>
+            <option value="jpeg">JPEG</option>
+          </optgroup>
+          <optgroup label="Source">
+            <option value="mmd">Mermaid (.mmd)</option>
+            ${editableGraph ? '<option value="mmd-live">Mermaid — with edits (.mmd)</option>' : ''}
+            ${editableGraph ? '<option value="ir-live">Architecture IR — with edits (.json)</option>' : ''}
+          </optgroup>
+          <optgroup label="Light theme">
+            <option value="png:light">PNG</option>
+            <option value="jpeg:light">JPEG</option>
+            <option value="svg:light">SVG</option>
+            <option value="pdf:light">PDF</option>
+          </optgroup>
+          <optgroup label="Dark theme">
+            <option value="png:dark">PNG</option>
+            <option value="jpeg:dark">JPEG</option>
+            <option value="svg:dark">SVG</option>
+            <option value="pdf:dark">PDF</option>
+          </optgroup>
         </select>
         <button class="primary" id="reset-btn" title="Reset zoom/pan (R)">Reset</button>
       </div>
@@ -469,18 +517,7 @@ ${fontImport}
           <input id="dfy-search" type="search" placeholder="Search nodes... (/)" />
         </div>` : ''}
         <h3>Service Types</h3>
-        <div class="legend-item" data-type="compute"><span class="legend-swatch" style="background:#ff9900"></span><span class="legend-label">Compute</span><span class="legend-detail">Lambda</span></div>
-        <div class="legend-item" data-type="database"><span class="legend-swatch" style="background:#336791"></span><span class="legend-label">Database</span><span class="legend-detail">Postgres</span></div>
-        <div class="legend-item" data-type="cache"><span class="legend-swatch" style="background:#dc382d"></span><span class="legend-label">Cache</span><span class="legend-detail">Redis</span></div>
-        <div class="legend-item" data-type="messaging"><span class="legend-swatch" style="background:#231f20"></span><span class="legend-label">Messaging</span><span class="legend-detail">Kafka</span></div>
-        <div class="legend-item" data-type="storage"><span class="legend-swatch" style="background:#569a31"></span><span class="legend-label">Storage</span><span class="legend-detail">S3</span></div>
-        <div class="legend-item" data-type="monitoring"><span class="legend-swatch" style="background:#e6522c"></span><span class="legend-label">Monitoring</span><span class="legend-detail">Prometheus</span></div>
-        <div class="legend-item" data-type="devops"><span class="legend-swatch" style="background:#2496ed"></span><span class="legend-label">DevOps</span><span class="legend-detail">Docker</span></div>
-        <div class="legend-item" data-type="network"><span class="legend-swatch" style="background:#8c4fff"></span><span class="legend-label">Network</span><span class="legend-detail">CloudFront</span></div>
-        <div class="legend-item" data-type="auth"><span class="legend-swatch" style="background:#eb5424"></span><span class="legend-label">Auth</span><span class="legend-detail">Auth0</span></div>
-        <div class="legend-item" data-type="ai"><span class="legend-swatch" style="background:#d97757"></span><span class="legend-label">AI/ML</span><span class="legend-detail">Anthropic</span></div>
-        <div class="legend-item" data-type="ui"><span class="legend-swatch" style="background:#61dafb"></span><span class="legend-label">UI</span><span class="legend-detail">React</span></div>
-        <div class="legend-item" data-type="middleware"><span class="legend-swatch" style="background:#339933"></span><span class="legend-label">Middleware</span><span class="legend-detail">Node.js</span></div>
+        ${legendHTML}
         <h3>Edges</h3>
         <div class="legend-item"><span class="legend-line"></span><span class="legend-label">Synchronous</span><span class="legend-detail">REST / SQL</span></div>
         <div class="legend-item"><span class="legend-line dashed"></span><span class="legend-label">Async / Event</span><span class="legend-detail">Queue / pub-sub</span></div>
@@ -846,11 +883,12 @@ ${fontImport}
       return anchor;
     }
 
-    function drawEdges() {
+    const svg = document.getElementById('edges');
+
+    function drawEdgesImmediate() {
       edgesGroup.innerHTML = '';
       const placedLabels = [];
       const w = canvas.offsetWidth, h = canvas.offsetHeight;
-      const svg = document.getElementById('edges');
       svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
       svg.setAttribute('width', w);
       svg.setAttribute('height', h);
@@ -923,17 +961,40 @@ ${fontImport}
         });
         
       });
-      
-      canvas.addEventListener('click', () => {
-         document.querySelectorAll('.edge-group').forEach(g => g.classList.remove('active'));
-         svg.classList.remove('has-active');
-         if (!activeLegendType) {
-            document.querySelectorAll('.dfy-node').forEach(n => n.classList.remove('dimmed'));
-         }
-         selectElement(null);
+    }
+
+    // drawEdges() fires on every pointermove while dragging a node, and each
+    // pass rebuilds the whole edge layer from scratch -- including, for a
+    // labeled edge, up to ~60 getTotalLength()/getPointAtLength() calls to
+    // place the label. Measured on a real 33-node/46-edge diagram, a single
+    // 40-step drag fired 41 full rebuilds totaling ~2.85s of layout work.
+    // Coalescing to one real rebuild per animation frame keeps the redraw
+    // continuous during a drag without redoing it 41 times when 1 would do.
+    let drawEdgesQueued = false;
+    const afterDrawEdgesHooks = [];
+    function onDrawEdgesComplete(fn) { afterDrawEdgesHooks.push(fn); }
+    function drawEdges() {
+      if (drawEdgesQueued) return;
+      drawEdgesQueued = true;
+      requestAnimationFrame(() => {
+        drawEdgesQueued = false;
+        drawEdgesImmediate();
+        for (const fn of afterDrawEdgesHooks) fn();
       });
     }
-    drawEdges();
+
+    // Deselect on an empty-canvas click. Wired once, here -- this used to be
+    // re-added inside drawEdges() itself, so every redraw stacked another
+    // duplicate listener onto canvas for the rest of the page's life.
+    canvas.addEventListener('click', () => {
+       document.querySelectorAll('.edge-group').forEach(g => g.classList.remove('active'));
+       svg.classList.remove('has-active');
+       if (!activeLegendType) {
+          document.querySelectorAll('.dfy-node').forEach(n => n.classList.remove('dimmed'));
+       }
+       selectElement(null);
+    });
+    drawEdgesImmediate();
     // Fit after first paint so offsetWidth/Height are available. A plain
     // double rAF is usually enough, but a host that defers this page's own
     // layout (an embedded/sandboxed iframe, for one) can still hand back a
@@ -1994,13 +2055,21 @@ ${fontImport}
         ctx.clearRect(0, 0, mw, mh);
         ctx.fillStyle = surfaceColor;
         ctx.fillRect(0, 0, mw, mh);
-        // Collect live positions from DOM cards
-        const liveNodes = Array.from(canvas.querySelectorAll('.dfy-node')).map(card => ({
-          cx: parseFloat(card.dataset.cx),
-          cy: parseFloat(card.dataset.cy),
-          w: card.offsetWidth,
-          h: card.offsetHeight,
-        })).filter(n => !isNaN(n.cx));
+        // Collect live positions from DOM cards, keyed by id up front so the
+        // edge pass below is an O(1) map lookup. This used to re-query every
+        // .dfy-node, once per edge per endpoint, to line the array index up
+        // with a node id -- measured at 55,761 querySelectorAll calls over a
+        // single 40-step drag on a 46-edge diagram.
+        const liveNodesById = new Map();
+        canvas.querySelectorAll('.dfy-node').forEach(card => {
+          const cx = parseFloat(card.dataset.cx);
+          if (isNaN(cx)) return;
+          liveNodesById.set(card.dataset.id, {
+            cx, cy: parseFloat(card.dataset.cy),
+            w: card.offsetWidth, h: card.offsetHeight,
+          });
+        });
+        const liveNodes = Array.from(liveNodesById.values());
         if (!liveNodes.length) return;
         const minX = Math.min(...liveNodes.map(n => n.cx - n.w / 2));
         const maxX = Math.max(...liveNodes.map(n => n.cx + n.w / 2));
@@ -2012,8 +2081,8 @@ ${fontImport}
         ctx.strokeStyle = edgeColor;
         ctx.lineWidth = 0.5;
         EDGES.forEach(e => {
-          const a = liveNodes.find((_, i) => canvas.querySelectorAll('.dfy-node')[i]?.dataset.id === e.from);
-          const b = liveNodes.find((_, i) => canvas.querySelectorAll('.dfy-node')[i]?.dataset.id === e.to);
+          const a = liveNodesById.get(e.from);
+          const b = liveNodesById.get(e.to);
           if (!a || !b) return;
           ctx.beginPath();
           ctx.moveTo(((a.cx - minX) * scaleX) + 4, ((a.cy - minY) * scaleY) + 4);
@@ -2046,9 +2115,10 @@ ${fontImport}
         minimapViewport.style.width = Math.min(mw - Math.max(0, vx), vw) + 'px';
         minimapViewport.style.height = Math.min(mh - Math.max(0, vy), vh) + 'px';
       }
-      // Re-render minimap whenever edges are redrawn (drag, resize, etc.)
-      const _origDrawEdges = drawEdges;
-      drawEdges = function() { _origDrawEdges(); renderMinimap(); };
+      // Re-render minimap whenever edges are redrawn (drag, resize, etc.) --
+      // hooked into the coalesced redraw so this also fires at most once per
+      // animation frame, not once per raw drawEdges() call.
+      onDrawEdgesComplete(renderMinimap);
       // Also on panzoom events
       canvas.addEventListener('panzoomchange', renderMinimap);
       requestAnimationFrame(() => requestAnimationFrame(renderMinimap));
