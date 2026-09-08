@@ -3,6 +3,11 @@ export interface GitLabCIOptions {
   triggerBranch?: string;    // default: 'main'
   nodeVersion?: string;      // default: '20'
   commitDiagrams?: boolean;  // default: false
+  /** Add a merge-request job that fails the pipeline when the architecture
+   *  drifted from the committed baseline. Default: true. */
+  gateOnPR?: boolean;
+  /** Committed IR file `diagramify check` compares against. */
+  baseline?: string;
 }
 
 export function generateGitLabCI(options: GitLabCIOptions): string {
@@ -32,6 +37,22 @@ export function generateGitLabCI(options: GitLabCIOptions): string {
     paths:
       - ${outPath}/
     expire_in: 30 days
+`;
+  }
+
+  const gateOnPR = options.gateOnPR !== false;
+  const baseline = options.baseline || 'diagrams/architecture.json';
+
+  if (gateOnPR) {
+    yaml += `
+check-architecture:
+  image: node:${nodeVer}
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - npm ci || npm install
+    - npx diagramify-ai check --baseline ${baseline}
 `;
   }
 

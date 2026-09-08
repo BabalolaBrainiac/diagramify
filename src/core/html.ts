@@ -934,8 +934,35 @@ ${fontImport}
       });
     }
     drawEdges();
-    // Fit after first paint so offsetWidth/Height are available
-    requestAnimationFrame(() => requestAnimationFrame(fitToContent));
+    // Fit after first paint so offsetWidth/Height are available. A plain
+    // double rAF is usually enough, but a host that defers this page's own
+    // layout (an embedded/sandboxed iframe, for one) can still hand back a
+    // zero-size canvasWrap at that point, which zeroes the fit scale and
+    // strands the diagram off-screen at ~0.1x with nothing visible. Fit
+    // again the moment the container reports a real size, and fall back to
+    // a short poll for hosts with no ResizeObserver at all.
+    let fittedOnce = false;
+    function fitOnceReady() {
+      if (fittedOnce) return;
+      if (canvasWrap.clientWidth > 0 && canvasWrap.clientHeight > 0) {
+        fittedOnce = true;
+        fitToContent();
+      }
+    }
+    requestAnimationFrame(() => requestAnimationFrame(fitOnceReady));
+    if (typeof ResizeObserver !== 'undefined') {
+      const fitObserver = new ResizeObserver(() => {
+        fitOnceReady();
+        if (fittedOnce) fitObserver.disconnect();
+      });
+      fitObserver.observe(canvasWrap);
+    } else {
+      let fitTries = 0;
+      const fitPoll = setInterval(() => {
+        fitOnceReady();
+        if (fittedOnce || ++fitTries > 20) clearInterval(fitPoll);
+      }, 100);
+    }
     window.addEventListener('resize', drawEdges);
     
     // Auto-calculate subgraph boundaries and assign nodes to subgraphs
@@ -2051,8 +2078,16 @@ ${fontImport}
       });
     }
 
+    // A single-letter shortcut should never fire while the reader is typing
+    // in a field — a plain <input> isn't caught by isContentEditable alone.
+    function isTypingTarget(e) {
+      const tag = e.target && e.target.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
+    }
+
     // Fullscreen
     document.addEventListener('keydown', e => {
+      if (isTypingTarget(e)) return;
       if (e.key.toLowerCase() === 'f') {
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen().catch(err => console.log('Fullscreen not available'));
@@ -2064,7 +2099,7 @@ ${fontImport}
 
     // Keyboard
     document.addEventListener('keydown', e => {
-      if (e.target.isContentEditable) return;
+      if (isTypingTarget(e)) return;
       const k = e.key.toLowerCase();
       if (k === 't') document.getElementById('theme-btn').click();
       else if (k === 'e') editBtn.click();
