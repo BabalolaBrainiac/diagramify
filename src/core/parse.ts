@@ -1,7 +1,9 @@
+import { parseMermaid } from 'beautiful-mermaid';
+
 export interface ParsedNode {
   id: string;
   label: string;
-  shape: 'rect' | 'round' | 'diamond' | 'stadium' | 'circle';
+  shape: 'rect' | 'round' | 'diamond' | 'stadium' | 'circle' | 'cylinder' | 'hexagon';
 }
 
 export interface ParsedEdge {
@@ -25,105 +27,78 @@ export interface ParsedGraph {
   subgraphs: ParsedSubgraph[];
 }
 
+const SHAPE_MAP: Record<string, ParsedNode['shape']> = {
+  rectangle: 'rect', rounded: 'round', diamond: 'diamond', stadium: 'stadium',
+  circle: 'circle', doublecircle: 'circle', cylinder: 'cylinder', hexagon: 'hexagon', subroutine: 'stadium',
+};
+
+const STRUCTURAL_LINE = /^(flowchart|graph|subgraph|end|classDef|class|click|style|linkStyle|%%)/i;
+
+/** Uses the renderer parser so editing and drawing share the same connections. */
 export function parseMermaidSource(source: string): ParsedGraph {
-  const lines = source.split('\n').map(l => l.trim()).filter(l => l);
-
-  let direction: 'TD' | 'LR' | 'BT' | 'RL' = 'TD';
-  const nodes: ParsedNode[] = [];
-  const edges: ParsedEdge[] = [];
+  const parsed = parseMermaid(source);
   const subgraphs: ParsedSubgraph[] = [];
-  const nodeMap = new Map<string, ParsedNode>();
-  const subgraphStack: { id: string; label: string; nodeIds: string[] }[] = [];
-
-  const addNode = (nodeId: string, label: string, shape: ParsedNode['shape']) => {
-    if (!nodeMap.has(nodeId)) {
-      const node: ParsedNode = { id: nodeId, label, shape };
-      nodes.push(node);
-      nodeMap.set(nodeId, node);
-      if (subgraphStack.length > 0) {
-        subgraphStack[subgraphStack.length - 1].nodeIds.push(nodeId);
-      }
+  function visit(groups: typeof parsed.subgraphs) {
+    for (const group of groups) {
+      visit(group.children);
+      subgraphs.push({ id: group.id, label: group.label, nodeIds: [...group.nodeIds] });
     }
-  };
-
-  const extractNodesAndEdges = (line: string) => {
-    // First extract edges to get node references, then extract nodes
-    // Pattern: nodeId[label] --> nodeId[label] or nodeId -->|label| nodeId
-    const edgePattern = /([a-zA-Z0-9_-]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?\s*(?:-\.->|-->|<-->)\s*(?:\|([^|]+)\|)?\s*([a-zA-Z0-9_-]+)(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\})?/g;
-
-    for (const match of line.matchAll(edgePattern)) {
-      const from = match[1];
-      const label = match[2];
-      const to = match[3];
-      const dashed = match[0].includes('-.-');
-      const bidirectional = match[0].startsWith('<');
-
-      if (from && to && from !== to) {
-        edges.push({
-          from,
-          to,
-          label: label ? label.trim() : undefined,
-          dashed,
-          bidirectional
-        });
-      }
-    }
-
-    // Extract nodes from the line (can have multiple)
-    const nodePatterns = [
-      { regex: /([a-zA-Z0-9_-]+)\[\[(.*?)\]\]/g, shape: 'stadium' as const },
-      { regex: /([a-zA-Z0-9_-]+)\(\((.*?)\)\)/g, shape: 'circle' as const },
-      { regex: /([a-zA-Z0-9_-]+)\[\(.*?\)\]/g, shape: 'stadium' as const },
-      { regex: /([a-zA-Z0-9_-]+)\{(.*?)\}/g, shape: 'diamond' as const },
-      { regex: /([a-zA-Z0-9_-]+)\[(.*?)\]/g, shape: 'rect' as const },
-      { regex: /([a-zA-Z0-9_-]+)\((.*?)\)/g, shape: 'round' as const },
-    ];
-
-    for (const { regex, shape } of nodePatterns) {
-      let match;
-      while ((match = regex.exec(line)) !== null) {
-        addNode(match[1], match[2], shape);
-      }
-    }
-  };
-
-  for (const line of lines) {
-    const dirMatch = line.match(/^(?:flowchart|graph)\s+([TDLRBF]+)/i);
-    if (dirMatch) {
-      const dir = dirMatch[1].toUpperCase();
-      if (['TD', 'LR', 'BT', 'RL'].includes(dir)) {
-        direction = dir as 'TD' | 'LR' | 'BT' | 'RL';
-      }
-      continue;
-    }
-
-    const subgraphStartMatch = line.match(/^subgraph\s+([a-zA-Z0-9_-]+)(?:\s+\[([^\]]+)\])?/);
-    if (subgraphStartMatch) {
-      const subgraphId = subgraphStartMatch[1];
-      const subgraphLabel = subgraphStartMatch[2] || subgraphId;
-      subgraphStack.push({ id: subgraphId, label: subgraphLabel, nodeIds: [] });
-      continue;
-    }
-
-    if (line === 'end') {
-      if (subgraphStack.length > 0) {
-        const completed = subgraphStack.pop()!;
-        subgraphs.push({
-          id: completed.id,
-          label: completed.label,
-          nodeIds: completed.nodeIds,
-        });
-      }
-      continue;
-    }
-
-    extractNodesAndEdges(line);
   }
+  visit(parsed.subgraphs);
+
+  const nodes: ParsedNode[] = Array.from(parsed.nodes.values(),
+    (node) => ({ id: node.id, label: node.label, shape: SHAPE_MAP[node.shape] ?? 'rect' }));
+  recoverDeclarationOrderLabels(nodes, source, parsed.direction);
 
   return {
-    direction,
+    direction: parsed.direction === 'TB' ? 'TD' : parsed.direction,
     nodes,
-    edges,
+    edges: parsed.edges.map(edge => ({ from: edge.source, to: edge.target, label: edge.label,
+      dashed: edge.style === 'dotted', bidirectional: edge.hasArrowStart && edge.hasArrowEnd })),
     subgraphs,
   };
+}
+
+/**
+ * Works around a limitation in the beautiful-mermaid parser: when an edge
+ * references a node ID before that node's own shape+label declaration (for
+ * example "N0 --> N1" followed later by "N0[Auth Service]"), the parser
+ * registers the ID on first sight with a placeholder label equal to its own
+ * ID, then keeps that placeholder — the later real declaration is dropped.
+ * See registerNode() in beautiful-mermaid's src/parser.ts, which only writes
+ * a node into its map the first time an ID is seen.
+ *
+ * This recovers the intended label without reimplementing the parser's shape
+ * grammar: it re-parses each source line on its own. A line that declares a
+ * node inline (whether standalone, like "N0[Auth Service]", or combined with
+ * an edge, like "N0[Auth Service] --> N1[Payment Service]") always carries
+ * its own label regardless of where the rest of the diagram declares things,
+ * so a single-line parse recovers the real label using the same real parser.
+ * Only runs when at least one node still holds a placeholder label, so a
+ * source with no declaration-order issue pays no extra parsing cost.
+ */
+function recoverDeclarationOrderLabels(nodes: ParsedNode[], source: string, direction: string): void {
+  const placeholders = new Map(nodes.filter(node => node.label === node.id).map(node => [node.id, node]));
+  if (placeholders.size === 0) return;
+
+  const header = `flowchart ${direction}`;
+  for (const rawLine of source.split('\n')) {
+    if (placeholders.size === 0) break;
+    const line = rawLine.trim();
+    if (!line || STRUCTURAL_LINE.test(line)) continue;
+    let statement;
+    try {
+      statement = parseMermaid(`${header}\n${line}`);
+    } catch {
+      continue;
+    }
+    for (const node of statement.nodes.values()) {
+      const placeholder = placeholders.get(node.id);
+      if (placeholder && node.label !== node.id) {
+        placeholder.label = node.label;
+        placeholder.shape = SHAPE_MAP[node.shape] ?? 'rect';
+        placeholders.delete(node.id);
+      }
+    }
+  }
 }

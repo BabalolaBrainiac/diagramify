@@ -17,6 +17,10 @@ export interface ServiceDefinition {
   simpleIconSlug?: string; // Simple Icons CDN slug override (e.g., 'apachekafka' for Kafka)
 }
 
+function serviceLookupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
 const serviceRegistry: Record<string, ServiceDefinition> = {
   // AI Services
   openai: {
@@ -640,6 +644,176 @@ const serviceRegistry: Record<string, ServiceDefinition> = {
   },
 
   // Generic fallback
+  kinde: {
+    name: 'Kinde',
+    icon: 'kinde',
+    color: '#0F1015',
+    backgroundColor: '#EEF0F3',
+    textColor: '#0F1015',
+    type: 'auth',
+    aliases: ['kinde-auth', 'kindeauth'],
+    description: 'Kinde - Authentication and user management',
+  },
+  langfuse: {
+    name: 'Langfuse',
+    icon: 'langfuse',
+    color: '#0A0A0A',
+    backgroundColor: '#EFEFEF',
+    textColor: '#0A0A0A',
+    type: 'monitoring',
+    aliases: ['langfuse-sdk'],
+    description: 'Langfuse - LLM observability',
+  },
+  langsmith: {
+    name: 'LangSmith',
+    icon: 'langchain',
+    color: '#1C3C3C',
+    backgroundColor: '#E8F0F0',
+    textColor: '#1C3C3C',
+    type: 'monitoring',
+    aliases: ['langchain-tracing'],
+    description: 'LangSmith - LLM tracing',
+  },
+  elevenlabs: {
+    name: 'ElevenLabs',
+    icon: 'elevenlabs',
+    color: '#000000',
+    backgroundColor: '#EDEDED',
+    textColor: '#000000',
+    type: 'ai',
+    aliases: ['eleven-labs', 'eleven'],
+    description: 'ElevenLabs - Speech synthesis',
+  },
+  'cloudflare d1': {
+    name: 'Cloudflare D1',
+    icon: 'cloudflare',
+    color: '#F38020',
+    backgroundColor: '#FEF0E6',
+    textColor: '#7A3E05',
+    type: 'database',
+    aliases: ['d1', 'cf-d1'],
+    description: 'Cloudflare D1 - SQL database',
+  },
+  'cloudflare kv': {
+    name: 'Cloudflare KV',
+    icon: 'cloudflare',
+    color: '#F38020',
+    backgroundColor: '#FEF0E6',
+    textColor: '#7A3E05',
+    type: 'cache',
+    aliases: ['kv', 'cf-kv', 'workers-kv'],
+    description: 'Cloudflare KV - Key value store',
+  },
+  'cloudflare r2': {
+    name: 'Cloudflare R2',
+    icon: 'cloudflare',
+    color: '#F38020',
+    backgroundColor: '#FEF0E6',
+    textColor: '#7A3E05',
+    type: 'storage',
+    aliases: ['r2', 'cf-r2'],
+    description: 'Cloudflare R2 - Object storage',
+  },
+  'cloudflare queues': {
+    name: 'Cloudflare Queues',
+    icon: 'cloudflare',
+    color: '#F38020',
+    backgroundColor: '#FEF0E6',
+    textColor: '#7A3E05',
+    type: 'messaging',
+    aliases: ['cf-queues'],
+    description: 'Cloudflare Queues - Message queue',
+  },
+  'cloudflare workers': {
+    name: 'Cloudflare Workers',
+    icon: 'cloudflare',
+    color: '#F38020',
+    backgroundColor: '#FEF0E6',
+    textColor: '#7A3E05',
+    type: 'compute',
+    aliases: ['workers', 'cf-workers'],
+    description: 'Cloudflare Workers - Edge compute',
+  },
+  'aws elastic beanstalk': {
+    name: 'AWS Elastic Beanstalk',
+    icon: 'aws-elasticbeanstalk',
+    color: '#FF9900',
+    backgroundColor: '#FFF5E6',
+    textColor: '#7A4A00',
+    type: 'compute',
+    aliases: ['elastic-beanstalk', 'beanstalk', 'eb'],
+    description: 'AWS Elastic Beanstalk - Managed deployment',
+  },
+  clerk: {
+    name: 'Clerk',
+    icon: 'clerk',
+    color: '#6C47FF',
+    backgroundColor: '#F0ECFF',
+    textColor: '#3D2A99',
+    type: 'auth',
+    aliases: ['clerk-auth'],
+    description: 'Clerk - Authentication',
+  },
+  workos: {
+    name: 'WorkOS',
+    icon: 'workos',
+    color: '#6363F1',
+    backgroundColor: '#EEEEFE',
+    textColor: '#33339B',
+    type: 'auth',
+    aliases: ['work-os'],
+    description: 'WorkOS - Enterprise authentication',
+  },
+  supabase: {
+    name: 'Supabase',
+    icon: 'supabase',
+    color: '#3FCF8E',
+    backgroundColor: '#E8FAF2',
+    textColor: '#186B47',
+    type: 'database',
+    aliases: ['supabase-js'],
+    description: 'Supabase - Managed Postgres platform',
+  },
+  paystack: {
+    name: 'Paystack',
+    icon: 'paystack',
+    color: '#00C3F7',
+    backgroundColor: '#E5F9FE',
+    textColor: '#00637F',
+    type: 'other',
+    aliases: ['pay-stack'],
+    description: 'Paystack - Payments',
+  },
+  flutterwave: {
+    name: 'Flutterwave',
+    icon: 'flutterwave',
+    color: '#F5A623',
+    backgroundColor: '#FEF5E6',
+    textColor: '#7A5210',
+    type: 'other',
+    aliases: ['rave'],
+    description: 'Flutterwave - Payments',
+  },
+  posthog: {
+    name: 'PostHog',
+    icon: 'posthog',
+    color: '#F54E00',
+    backgroundColor: '#FEEDE6',
+    textColor: '#7A2700',
+    type: 'analytics',
+    aliases: ['post-hog'],
+    description: 'PostHog - Product analytics',
+  },
+  temporal: {
+    name: 'Temporal',
+    icon: 'temporal',
+    color: '#000000',
+    backgroundColor: '#EDEDED',
+    textColor: '#000000',
+    type: 'messaging',
+    aliases: ['temporalio'],
+    description: 'Temporal - Durable workflows',
+  },
   service: {
     name: 'Service',
     icon: 'service',
@@ -656,6 +830,7 @@ const serviceRegistry: Record<string, ServiceDefinition> = {
  */
 export function getServiceDefinition(name: string): ServiceDefinition {
   const normalized = name.toLowerCase().trim();
+  const lookup = serviceLookupKey(name);
 
   // Direct lookup
   if (serviceRegistry[normalized]) {
@@ -663,14 +838,62 @@ export function getServiceDefinition(name: string): ServiceDefinition {
   }
 
   // Alias lookup
-  for (const [, service] of Object.entries(serviceRegistry)) {
-    if (service.aliases.includes(normalized)) {
+  for (const [key, service] of Object.entries(serviceRegistry)) {
+    if (
+      serviceLookupKey(key) === lookup ||
+      serviceLookupKey(service.name) === lookup ||
+      service.aliases.some((alias) => serviceLookupKey(alias) === lookup)
+    ) {
       return service;
     }
   }
 
   // Fallback to generic service
   return serviceRegistry.service;
+}
+
+export interface ServiceClassification {
+  type: ServiceType;
+  color: string;
+  backgroundColor: string;
+  simpleIconSlug?: string;
+}
+
+/**
+ * Classifies a node label into a service type, color, and icon slug.
+ *
+ * This is the single source of truth for "what type is this node" -- used
+ * both when a diagram is first rendered and by the live editor when it
+ * reconciles cards against the graph. The two must agree: a node classified
+ * as 'middleware' by one and 'other' by the other means the sidebar legend
+ * and the actual node no longer match, so legend filtering silently stops
+ * working for that node the moment the editor touches the page.
+ *
+ * getServiceDefinition only recognizes names in the fixed registry above and
+ * falls back to a generic 'other' entry for everything else, so labels like
+ * "Auth Service" or "API Gateway" are re-classified here using a handful of
+ * keyword heuristics before giving up and calling them 'other'.
+ */
+export function classifyService(label: string): ServiceClassification {
+  const definition = getServiceDefinition(label);
+  if (definition.name !== 'Service') {
+    return {
+      type: definition.type,
+      color: definition.color,
+      backgroundColor: definition.backgroundColor,
+      simpleIconSlug: definition.simpleIconSlug,
+    };
+  }
+  if (/worker|job|consumer|scheduler/i.test(label)) {
+    return { type: 'compute', color: '#6366f1', backgroundColor: '#eef2ff' };
+  }
+  if (/endpoint|api|gateway/i.test(label)) {
+    return { type: 'middleware', color: '#0f766e', backgroundColor: '#f0fdfa' };
+  }
+  if (/module|service|component/i.test(label)) {
+    return { type: 'compute', color: '#475569', backgroundColor: '#f1f5f9' };
+  }
+  return { type: 'other', color: '#94a3b8', backgroundColor: '#f5f5f5' };
 }
 
 /**

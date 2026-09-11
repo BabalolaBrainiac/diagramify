@@ -12,26 +12,28 @@ Do not open a public issue for a vulnerability. Use
 Include affected versions, impact, reproduction steps, and any suggested
 mitigation. Do not include real API keys or private source code.
 
-## Known Production Dependency Vulnerabilities
+## Production Dependency Status
 
-As of `v0.2.1`, `npm audit` reports **9 production vulnerabilities** (7 low, 2 moderate)
-with **no upstream fix available**. These are tracked here for transparency.
+`npm run audit:prod` reports **0 production vulnerabilities** as of `v0.3.0`.
 
-Run `npm run audit:prod` to see the current status before publishing.
+Run `npm run audit:prod` before every publish. The `prepublishOnly` script does
+not run it, so run it yourself.
 
-| Vulnerability path | Severity | Upstream fix | Notes |
-|--------------------|----------|-------------|-------|
-| `@ai-sdk/provider-utils` (via `ai`) | Moderate | None available | Vercel AI SDK transitive; waiting on upstream release |
-| `jsondiffpatch` | Low | None available | Used internally for diff output; not user-facing |
+### Known development-only advisories
 
-### Workaround
+These advisories affect build and release tooling only. They never ship to a
+consumer, because `files` in `package.json` publishes `dist/` and `skills/` only.
 
-These vulnerabilities are **not exploitable via the Diagramify CLI or public API surface** —
-they are in transitive dependencies that are invoked only with trusted inputs (your own
-codebase and LLM responses). No untrusted user input flows through these paths.
+| Path | Severity | Status |
+|------|----------|--------|
+| `tmp` (via `np` -> `listr-input` -> `inquirer`) | High | No upstream fix. Runs at release time on a maintainer machine, with maintainer input only. |
+| `esbuild` (via `vitest` -> `vite`) | Low | Affects the Vite dev server, which this project does not start. |
 
-Consumers who require a clean audit should pin an alternative AI SDK version via
-[npm overrides](https://docs.npmjs.com/cli/v10/configuring-npm/package-json#overrides) once
-an upstream fix is published.
+### Trust boundaries
+
+- The CLI reads your codebase and sends a summary to the provider you configure.
+- An LLM response is treated as untrusted text. It is parsed as Mermaid, never executed.
+- The `preview` and `watch` servers bind to localhost. Do not expose them to a network.
+- An API key is read from the environment or a config file. Diagramify never logs it.
 
 We will update this section when upstream fixes are released.

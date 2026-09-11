@@ -11,6 +11,8 @@ export function makeCICommand(): Command {
     .option('--outdir <dir>', 'Directory to place generated architecture diagrams', 'diagrams')
     .option('--branch <branch>', 'Branch to trigger on', 'main')
     .option('--commit', 'Auto-commit generated diagrams back to the repo', false)
+    .option('--baseline <file>', 'Committed IR baseline "check" compares against', 'diagrams/architecture.json')
+    .option('--no-gate', 'Skip the pull/merge-request job that fails the build on architecture drift')
     .action(async (provider, options) => {
       try {
         if (provider === 'github') {
@@ -18,6 +20,8 @@ export function makeCICommand(): Command {
             outputPath: options.outdir,
             triggerBranch: options.branch,
             commitDiagrams: options.commit,
+            gateOnPR: options.gate,
+            baseline: options.baseline,
           });
           await mkdir('.github/workflows', { recursive: true });
           await writeFile('.github/workflows/diagramify.yml', content);
@@ -27,6 +31,8 @@ export function makeCICommand(): Command {
             outputPath: options.outdir,
             triggerBranch: options.branch,
             commitDiagrams: options.commit,
+            gateOnPR: options.gate,
+            baseline: options.baseline,
           });
           await writeFile('.gitlab-ci.yml', content);
           console.log('Created .gitlab-ci.yml');

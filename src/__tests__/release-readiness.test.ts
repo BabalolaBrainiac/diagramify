@@ -18,24 +18,27 @@ afterEach(() => {
 });
 
 describe('release readiness regressions', () => {
-  it('selects the provider default model when only the provider is overridden', async () => {
+  it('keeps the provider that was asked for, and leaves the model open', async () => {
     delete process.env.DIAGRAMIFY_MODEL;
 
-    await expect(loadConfig({ provider: 'google' })).resolves.toMatchObject({
-      provider: 'google',
-      model: 'gemini-2.5-flash',
-    });
-    await expect(loadConfig({ provider: 'openai' })).resolves.toMatchObject({
-      provider: 'openai',
-      model: 'gpt-4o',
-    });
+    // The model is chosen against the live provider at call time. Pinning one
+    // here would go stale the moment a provider ships a new model.
+    for (const provider of ['google', 'openai', 'anthropic'] as const) {
+      const config = await loadConfig({ provider });
+      expect(config.provider).toBe(provider);
+      expect(config.model).toBeUndefined();
+    }
+  });
+
+  it('keeps an explicit model, so a caller can pin one', async () => {
+    const config = await loadConfig({ provider: 'google', model: 'gemini-flash-latest' });
+    expect(config.model).toBe('gemini-flash-latest');
   });
 
   it('ignores undefined config overrides from optional CLI flags', async () => {
-    await expect(loadConfig({ provider: undefined })).resolves.toMatchObject({
-      provider: 'anthropic',
-      model: 'claude-sonnet-4-6',
-    });
+    const config = await loadConfig({ provider: undefined });
+    expect(config.provider).toBeTruthy();
+    expect(config.tier).toBe('balanced');
   });
 
   it.each([

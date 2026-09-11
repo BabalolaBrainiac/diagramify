@@ -2,6 +2,11 @@
 
 ## Generate
 
+`generateDiagram` accepts an optional `engine` with a `generate(request)` method.
+The method returns `{ graph, tokensUsed? }` using the supplied graph schema.
+`prepareArchitecture` and `completeArchitecture` expose the same workflow as separate steps.
+`renderGraph` validates and renders a complete graph document without inference.
+
 ```typescript
 import { generateDiagram } from 'diagramify-ai';
 
@@ -84,3 +89,20 @@ export function Architecture({ source }: { source: string }) {
 ```
 
 React and React DOM are optional peer dependencies. The component renders an iframe containing Diagramify's interactive HTML viewer.
+
+Source updates retain the iframe and independent local edits.
+`onChange(snapshot)` receives accepted graph changes. `onError(error)` receives rejected source updates.
+The React entry builds for browsers without Node.js modules.
+
+## Shared graph editing
+
+`createGraphSession(graph)` provides `read`, `apply`, `replace`, `undo`, `redo`, and `subscribe`.
+`apply(operations, expectedRevision)` validates the complete batch before publication.
+Stale revisions throw `GraphConflictError`.
+Deleting a node also removes its connections. Undo restores the complete graph.
+
+The browser exposes this interface through `window.diagramify`.
+`createPreviewServer({ source, port })` starts a local shared graph server.
+Read `/api/graph`, then POST `{ expectedRevision, operations }` to `/api/operations`.
+HTTP and WebSocket use one port. Live updates use `/updates`.
+See `docs/live-editing.md` for operation fields and conflict handling.

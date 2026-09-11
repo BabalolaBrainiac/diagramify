@@ -1,3 +1,7 @@
+import type { ArchitectureGraph } from './ir.js';
+import type { ArchitectureEngine } from './engines.js';
+import type { GraphQuality } from './graph-quality.js';
+
 export type DiagramType =
   | 'flowchart'
   | 'sequence'
@@ -7,20 +11,41 @@ export type DiagramType =
   | 'xychart'
   | 'auto';
 
-export type OutputFormat = 'svg' | 'png' | 'jpeg' | 'html' | 'mmd';
+export type OutputFormat =
+  | 'svg'
+  | 'png'
+  | 'jpeg'
+  | 'html'
+  | 'mmd'
+  | 'pdf'
+  | 'drawio'
+  | 'excalidraw'
+  | 'json';
 
 export type ProviderName = 'anthropic' | 'openai' | 'google';
 
 export interface DiagramifyConfig {
   provider: ProviderName;
   model?: string;
+  /** How much capability to ask for when no model is named. */
+  tier?: 'fast' | 'balanced' | 'best';
+  /** Set false to skip the provider model lookup and use a pinned name. */
+  discoverModels?: boolean;
   apiKey?: string;
   theme?: string;
   darkMode?: boolean;
+  /** Background color for SVG and raster output. Use `transparent` to keep the alpha channel. */
+  backgroundColor?: string;
+  /** Make the HTML viewer self-contained. It then issues no network request. */
+  offlineMode?: boolean;
   defaultOutput?: OutputFormat[];
   temperature?: number;
   maxTokens?: number;
-  direction?: 'LR' | 'TD' | 'TB' | 'RL';
+  direction?: 'LR' | 'TD' | 'TB' | 'RL' | 'BT';
+  /** Use an installed Ollama model. No model download occurs. */
+  localModel?: string;
+  /** Local Ollama address. The default is http://127.0.0.1:11434. */
+  localModelUrl?: string;
 }
 
 export interface GenerateOptions {
@@ -30,10 +55,20 @@ export interface GenerateOptions {
   diagramType?: DiagramType;
   extraContext?: string;
   config?: Partial<DiagramifyConfig>;
+  /** Build the graph from the codebase alone. No provider and no network. */
+  noLLM?: boolean;
+  /** A caller can supply interpretation without a provider key. */
+  engine?: ArchitectureEngine;
 }
 
 export interface RenderOptions {
   theme?: string;
+  /** Make the HTML viewer self-contained. It then issues no network request. */
+  offlineMode?: boolean;
+  /** Shown as the document title, and used by the PDF and editable exports. */
+  title?: string;
+  /** Reuse an existing graph instead of parsing the Mermaid source again. */
+  graph?: ArchitectureGraph;
   width?: number;
   height?: number;
   backgroundColor?: string;
@@ -52,12 +87,20 @@ export interface HTMLGenerationOptions extends RenderOptions {
 
 export interface DiagramifyResult {
   mermaid: string;
+  /** The typed graph the diagram came from. Every exporter reads this. */
+  graph?: ArchitectureGraph;
   svg?: string;
   png?: Buffer;
   jpeg?: Buffer;
   html?: string;
+  pdf?: Buffer;
+  drawio?: string;
+  excalidraw?: string;
+  /** The IR as stable JSON. The CI drift gate compares this. */
+  json?: string;
   diagramType: DiagramType;
   tokensUsed?: number;
+  quality?: GraphQuality;
 }
 
 export interface DetectedDependency {
@@ -65,12 +108,27 @@ export interface DetectedDependency {
   rawName: string;
   version?: string;
   type: 'database' | 'cache' | 'messaging' | 'auth' | 'monitoring' | 'compute' | 'storage' | 'other';
+  source?: string;
 }
 
 export interface DetectedEndpoint {
   path: string;
   method?: string;
   file: string;
+}
+
+export interface EvidenceItem {
+  service: string;
+  source: string;
+  hint: string;
+}
+
+export interface DetectedServiceLink {
+  from: string;
+  to: string;
+  label: string;
+  kind: 'sync' | 'async';
+  source: string;
 }
 
 export interface AnalysisResult {
@@ -86,5 +144,10 @@ export interface AnalysisResult {
   envServices: string[];
   apiEndpoints: DetectedEndpoint[];
   serviceDirectories: string[];
-  internalLinks?: Array<{from: string; to: string}>;
+  internalLinks?: Array<{from: string; to: string; source?: string}>;
+  componentSources?: Array<{ component: string; source: string }>;
+  serviceLinks?: DetectedServiceLink[];
+  /** Components proved by an environment file, a container file, or infra code. */
+  evidence?: EvidenceItem[];
+  coverage?: { selectedFiles: number; fileLimit: number; limitReached: boolean };
 }

@@ -1,3 +1,5 @@
+import { brandIconSVG } from './generated-icons.js';
+import { semanticIconSVG } from './semantic-icons.js';
 const serviceToSlugMap: Record<string, string> = {
   // AI/ML Services
   openai: 'openai',
@@ -73,6 +75,7 @@ const serviceToSlugMap: Record<string, string> = {
   okta: 'okta',
   keycloak: 'keycloak',
   clerk: 'clerk',
+  kinde: 'kinde',
   
   // Monitoring / Observability
   newrelic: 'newrelic',
@@ -510,6 +513,7 @@ const brandColors: Record<string, string> = {
   elasticsearch: '#005571',
   jenkins: '#d24939',
   openai: '#10a37f',
+  kinde: '#0f1015',
 };
 
 export interface SimpleIconConfig {
@@ -520,7 +524,7 @@ export interface SimpleIconConfig {
 import { AWS_INLINE_SVG } from './aws-inline.js';
 import { INLINE_SVG } from './inline-icons.js';
 
-export function getIconURL(service: string, hexColor?: string): string {
+export function getIconURL(service: string, hexColor?: string, _offline = false): string {
   const normalizedService = service.toLowerCase().trim();
   let mappedSlug = serviceToSlugMap[normalizedService];
   
@@ -540,42 +544,39 @@ export function getIconURL(service: string, hexColor?: string): string {
     }
   }
 
-  // Keyword heuristic — only used for CDN lookup, NOT treated as a definitive mapping.
-  // We keep it separate from mappedSlug so truly unknown services still fall through
-  // to the data-URI fallback rather than an unverifiable CDN URL.
-  let heuristicSlug: string | undefined;
-  if (!mappedSlug) {
-    if (/auth|login|security|identity/i.test(service)) heuristicSlug = 'keycloak';
-    else if (/admin|config|setting|system/i.test(service)) heuristicSlug = 'kubernetes';
-    else if (/api|gateway/i.test(service)) heuristicSlug = 'openapiinitiative';
-    else if (/job|worker|task|cron|process/i.test(service)) heuristicSlug = 'apacheairflow';
-    else if (/\bweb\b|frontend|\bclient\b/i.test(service)) heuristicSlug = 'html5';
-  }
-
-  const color = hexColor || brandColors[normalizedService] || '666666';
-  const slug = mappedSlug ?? heuristicSlug ?? normalizedService.replace(/[^a-z0-9]/g, '');
+  const colorValue = hexColor || brandColors[normalizedService] || '#666666';
+  const color = colorValue.startsWith('#') ? colorValue : `#${colorValue}`;
+  const slug = mappedSlug ?? normalizedService.replace(/[^a-z0-9]/g, '');
 
   // Check AWS inline SVGs
   const inline = AWS_INLINE_SVG[slug];
   if (inline) {
-    return 'data:image/svg+xml;base64,' + Buffer.from(inline).toString('base64');
+    return 'data:image/svg+xml;base64,' + encodeSVG(inline);
   }
 
   // Check general inline SVGs
   const generalInline = INLINE_SVG[slug];
   if (generalInline) {
-    const colored = generalInline.replace(/currentColor/g, `#${color.replace('#', '')}`);
-    return 'data:image/svg+xml;base64,' + Buffer.from(colored).toString('base64');
+    const colored = generalInline.replace(/currentColor/g, color);
+    return 'data:image/svg+xml;base64,' + encodeSVG(colored);
   }
 
-  // If we found a mapped slug, try CDN
-  if (mappedSlug) {
-    return `https://cdn.simpleicons.org/${slug}/${color.replace('#', '')}`;
+  // Brand icons generated from simple-icons at build time. These cover most
+  // services, need no network, and carry the correct brand colour.
+  const brand = brandIconSVG(slug, color);
+  if (brand) {
+    return 'data:image/svg+xml;base64,' + encodeSVG(brand);
+  }
+
+  // A semantic symbol states the component type without borrowing a vendor logo.
+  const semantic = semanticIconSVG(service, color);
+  if (semantic) {
+    return 'data:image/svg+xml;base64,' + encodeSVG(semantic);
   }
 
   // No mapping found, return fallback SVG as data URI
   const fallbackSvg = getFallbackSVG(service, color);
-  return 'data:image/svg+xml;base64,' + Buffer.from(fallbackSvg).toString('base64');
+  return 'data:image/svg+xml;base64,' + encodeSVG(fallbackSvg);
 }
 
 export function getFallbackSVG(label: string, color: string = '#999999'): string {
@@ -595,6 +596,10 @@ export function getFallbackSVG(label: string, color: string = '#999999'): string
       ${chars}
     </text>
   </svg>`;
+}
+
+function encodeSVG(value: string): string {
+  return btoa(Array.from(new TextEncoder().encode(value), byte => String.fromCharCode(byte)).join(''));
 }
 
 export function hasServiceMapping(service: string): boolean {

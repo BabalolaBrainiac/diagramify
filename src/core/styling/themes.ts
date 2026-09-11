@@ -200,7 +200,13 @@ export function generateThemeCSS(theme: DiagramTheme): string {
       color: ${colors.text};
     }
 
-    .node {
+    /* Target the shape children. A stroke on the group also paints the label
+       glyphs, which makes the text unreadable at a normal font size. */
+    .node > rect,
+    .node > circle,
+    .node > ellipse,
+    .node > polygon,
+    .node > path {
       fill: ${colors.nodeBackground};
       stroke: ${colors.nodeBorder};
       stroke-width: 1.5px;
@@ -209,6 +215,7 @@ export function generateThemeCSS(theme: DiagramTheme): string {
 
     .node text {
       fill: ${colors.text};
+      stroke: none;
       font-family: ${typography.fontFamily};
       font-size: ${typography.fontSize}px;
       font-weight: ${typography.fontWeight};

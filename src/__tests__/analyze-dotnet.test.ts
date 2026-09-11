@@ -78,8 +78,8 @@ app.Run();
       expect.objectContaining({ method: 'POST', path: 'api/v{version}/customers' }),
     ]));
     expect(analysis.internalLinks).toEqual(expect.arrayContaining([
-      { from: 'API', to: 'Customers' },
-      { from: 'Customers', to: 'Common' },
+      { from: 'API', to: 'Customers', source: 'src/API/AccountService.Api/AccountService.Api.csproj' },
+      { from: 'Customers', to: 'Common', source: 'src/Modules/Customers/AccountService.Modules.Customers.Application/AccountService.Modules.Customers.Application.csproj' },
     ]));
   });
 });

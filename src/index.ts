@@ -1,5 +1,14 @@
-export { generateDiagram } from './core/generate.js';
-export { renderDiagram } from './core/render.js';
+export { generateDiagram, prepareArchitecture, completeArchitecture } from './core/generate.js';
+export { renderDiagram, renderGraph } from './core/render.js';
+export { createOllamaEngine } from './core/ollama.js';
+export type { OllamaOptions } from './core/ollama.js';
+export type { ArchitectureEngine, ArchitectureRequest } from './core/engines.js';
+export { readGraphDocument, serializeGraphDocument, graphDocumentSchema } from './core/graph-document.js';
+export { assessGraph } from './core/graph-quality.js';
+export { createGraphSession, applyGraphOperations, identifyGraph, GraphConflictError } from './core/graph-session.js';
+export type { GraphOperation, GraphSnapshot } from './core/graph-session.js';
+export { createPreviewServer } from './core/preview-server.js';
+export type { GraphQuality } from './core/graph-quality.js';
 export { analyzeCodebase } from './core/analyze.js';
 export { loadConfig } from './core/config.js';
 export { resolveModel, callLLM } from './core/provider.js';
@@ -12,7 +21,44 @@ export type {
   RenderOptions,
   DiagramifyResult,
   AnalysisResult,
+  DetectedServiceLink,
   DiagramType,
   OutputFormat,
   ProviderName,
 } from './core/types.js';
+
+// The Architecture IR. Every renderer and exporter reads this one type.
+export {
+  architectureGraphSchema,
+  deserializeGraph,
+  emptyGraph,
+  normalizeGraph,
+  safeId,
+  serializeGraph,
+  validateGraph,
+} from './core/ir.js';
+export type {
+  ArchitectureGraph,
+  ArchitectureGraphInput,
+  ClaimStatus,
+  SourceReference,
+  Direction,
+  EdgeKind,
+  IREdge,
+  IRGroup,
+  IRNode,
+  NodeLayout,
+  NodeShape,
+} from './core/ir.js';
+
+export { generateGraph } from './core/generate.js';
+export { analysisToGraph } from './core/ir-analyzer.js';
+export { graphToMermaid, mermaidToGraph } from './core/ir-mermaid.js';
+export { attachLayout, hasLayout, readExtent } from './core/ir-layout.js';
+export { svgToPDF } from './core/export/pdf.js';
+export { graphToDrawio, graphToExcalidraw } from './core/export/editable.js';
+export { compareGraphs, formatDriftReport } from './core/drift.js';
+export type { DriftReport, EdgeChange, NodeChange } from './core/drift.js';
+
+export { collectEvidence, summarizeEvidence, environmentNames } from './core/evidence.js';
+export type { Evidence } from './core/evidence.js';

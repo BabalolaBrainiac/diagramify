@@ -1,10 +1,14 @@
 import { Command } from 'commander';
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, resolve } from 'path';
-import { renderDiagram } from '../../core/render.js';
+import { basename as pathBasename, join, resolve } from 'path';
+import { renderDiagram, renderGraph } from '../../core/render.js';
+import { deserializeGraph } from '../../core/ir.js';
+import { completeArchitecture } from '../../core/generate.js';
 import type { OutputFormat, RenderOptions } from '../../core/types.js';
 
-const VALID_OUTPUT_FORMATS = new Set<OutputFormat>(['svg', 'png', 'jpeg', 'html', 'mmd']);
+const VALID_OUTPUT_FORMATS = new Set<OutputFormat>([
+  'svg', 'png', 'jpeg', 'html', 'mmd', 'pdf', 'drawio', 'excalidraw', 'json',
+]);
 
 function parseOutputFormats(value: string | undefined, defaults: OutputFormat[]): OutputFormat[] {
   const formats = value
@@ -24,15 +28,25 @@ function parseOutputFormats(value: string | undefined, defaults: OutputFormat[])
 
 export const renderCommand = new Command()
   .name('render')
-  .description('Render an existing .mmd file to SVG, PNG, JPEG, HTML, or Mermaid source')
-  .argument('<input>', 'Path to .mmd file or "-" for stdin')
-  .option('--out <formats>', 'Output formats: svg,png,jpeg,html,mmd (default: svg,html)')
+  .description(
+    'Render an existing .mmd file to SVG, PNG, JPEG, HTML, PDF, draw.io, Excalidraw, ' +
+    'Mermaid source, or the architecture graph as JSON',
+  )
+  .argument('<input>', 'Path to Mermaid or graph JSON, or "-" for stdin')
+  .option('--input-format <format>', 'Input format: mermaid, json, or proposal. JSON files are detected by extension.')
+  .option('--request <path>', 'Validate a proposal against a request saved with generate --prepare')
+  .option(
+    '--out <formats>',
+    'Output formats: svg,png,jpeg,html,mmd,pdf,drawio,excalidraw,json (default: svg,html)',
+  )
   .option('--outdir <dir>', 'Output directory (default: current directory)')
   .option('--name <name>', 'Output filename (default: diagram)')
   .option('--theme <theme>', 'Diagram theme name')
   .option('--dark', 'Use dark mode theme')
   .option('--width <px>', 'Output width in pixels (default: 1200)', '1200')
   .option('--quality <1-100>', 'JPEG quality (default: 90)', '90')
+  .option('--background <color>', 'Background color, or "transparent" to keep the alpha channel')
+  .option('--offline', 'Make the HTML viewer self-contained, with no network request')
   .option('--stdout', 'Print SVG to stdout instead of writing files')
   .action(async (inputPath: string, options) => {
     try {
@@ -59,10 +73,27 @@ export const renderCommand = new Command()
         width: parseInt(options.width, 10),
         quality: parseInt(options.quality, 10),
         darkMode: options.dark ?? false,
+        backgroundColor: options.background,
+        title: options.name,
+        offlineMode: options.offline === true,
       };
 
       console.error('Rendering diagram...');
-      const result = await renderDiagram(mermaidSource, formats, renderOptions);
+      const inputFormat = options.inputFormat ?? (options.request ? 'proposal' : inputPath.toLowerCase().endsWith('.json') ? 'json' : 'mermaid');
+      if (!['mermaid', 'json', 'proposal'].includes(inputFormat)) throw new Error('The input format must be mermaid, json, or proposal.');
+      if (options.request && inputFormat !== 'proposal') throw new Error('A saved request requires proposal input.');
+      let request = {};
+      if (options.request) {
+        request = JSON.parse(readFileSync(resolve(options.request), 'utf-8'));
+        if (!request || typeof request !== 'object' || !('prompt' in request) || !('schema' in request)) {
+          throw new Error('Supply a request saved with generate --prepare.');
+        }
+      }
+      const result = inputFormat === 'proposal'
+        ? await renderGraph(completeArchitecture(request, JSON.parse(mermaidSource)), formats, renderOptions)
+        : inputFormat === 'json'
+        ? await renderGraph(deserializeGraph(mermaidSource), formats, renderOptions)
+        : await renderDiagram(mermaidSource, formats, renderOptions);
 
       if (options.stdout) {
         if (result.svg) {
@@ -70,7 +101,9 @@ export const renderCommand = new Command()
         }
       } else {
         const outDir = options.outdir ? resolve(options.outdir) : process.cwd();
-        const baseName = options.name || 'diagram';
+        // --name only ever names an output file; strip any directory component
+        // so it cannot write outside outDir (e.g. --name ../../x).
+        const baseName = pathBasename(options.name || 'diagram') || 'diagram';
 
         mkdirSync(outDir, { recursive: true });
 
@@ -103,6 +136,30 @@ export const renderCommand = new Command()
           const mmdPath = join(outDir, `${baseName}.mmd`);
           writeFileSync(mmdPath, result.mermaid);
           console.error(`Generated: ${mmdPath}`);
+        }
+
+        if (formats.includes('pdf') && result.pdf) {
+          const pdfPath = join(outDir, `${baseName}.pdf`);
+          writeFileSync(pdfPath, result.pdf);
+          console.error(`Generated: ${pdfPath}`);
+        }
+
+        if (formats.includes('drawio') && result.drawio) {
+          const drawioPath = join(outDir, `${baseName}.drawio`);
+          writeFileSync(drawioPath, result.drawio);
+          console.error(`Generated: ${drawioPath}`);
+        }
+
+        if (formats.includes('excalidraw') && result.excalidraw) {
+          const excalidrawPath = join(outDir, `${baseName}.excalidraw`);
+          writeFileSync(excalidrawPath, result.excalidraw);
+          console.error(`Generated: ${excalidrawPath}`);
+        }
+
+        if (formats.includes('json') && result.json) {
+          const jsonPath = join(outDir, `${baseName}.json`);
+          writeFileSync(jsonPath, result.json);
+          console.error(`Generated: ${jsonPath}`);
         }
       }
     } catch (error) {

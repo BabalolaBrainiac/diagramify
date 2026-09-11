@@ -1,19 +1,15 @@
 import { resolve } from 'path';
 import { existsSync } from 'fs';
 import type { DiagramifyConfig, ProviderName } from './types.js';
+import { apiKeyFor, detectProvider } from './models.js';
 
-const DEFAULT_MODELS: Record<ProviderName, string> = {
-  anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-4o',
-  google: 'gemini-2.5-flash',
-};
-
-const DEFAULTS: DiagramifyConfig = {
-  provider: 'anthropic',
+const DEFAULTS: Omit<DiagramifyConfig, 'provider'> = {
   theme: 'default',
   defaultOutput: ['svg', 'mmd'],
-  temperature: 0.7,
+  temperature: 0,
   maxTokens: 8192,
+  tier: 'balanced',
+  discoverModels: true,
 };
 
 async function loadConfigFile(): Promise<Partial<DiagramifyConfig> | null> {
@@ -47,6 +43,9 @@ function loadEnvConfig(): Partial<DiagramifyConfig> {
     config.model = process.env.DIAGRAMIFY_MODEL;
   }
 
+  if (process.env.DIAGRAMIFY_LOCAL_MODEL) config.localModel = process.env.DIAGRAMIFY_LOCAL_MODEL;
+  if (process.env.DIAGRAMIFY_LOCAL_MODEL_URL) config.localModelUrl = process.env.DIAGRAMIFY_LOCAL_MODEL_URL;
+
   if (process.env.DIAGRAMIFY_THEME) {
     config.theme = process.env.DIAGRAMIFY_THEME;
   }
@@ -70,29 +69,28 @@ export async function loadConfig(
   const fileConfig = await loadConfigFile();
   const envConfig = loadEnvConfig();
 
-  const merged: DiagramifyConfig = {
+  const merged = {
     ...DEFAULTS,
     ...withoutUndefined(fileConfig),
     ...withoutUndefined(envConfig),
     ...withoutUndefined(override),
-  };
+  } as DiagramifyConfig;
+
+  // Whichever key exists decides the provider, so supplying one key is all a
+  // user has to do. A flag, the environment, or a config file still wins.
+  if (!merged.provider) {
+    merged.provider = detectProvider(merged) ?? ('anthropic' as ProviderName);
+  }
 
   if (!merged.apiKey) {
-    const provider = merged.provider as ProviderName;
-    const envVarMap: Record<ProviderName, string> = {
-      anthropic: 'ANTHROPIC_API_KEY',
-      openai: 'OPENAI_API_KEY',
-      google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    };
-    const envVar = envVarMap[provider];
-    if (envVar && process.env[envVar]) {
-      merged.apiKey = process.env[envVar];
+    // One lookup for every provider, including the Gemini variable name.
+    const found = apiKeyFor(merged.provider, merged);
+    if (found) {
+      merged.apiKey = found;
     }
   }
 
-  if (!merged.model) {
-    merged.model = DEFAULT_MODELS[merged.provider];
-  }
-
+  // The model stays undefined here. It resolves against the live provider at
+  // call time, so a newly released model needs no new release of this package.
   return merged;
 }

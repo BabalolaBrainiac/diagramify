@@ -4,6 +4,10 @@ Use `npx diagramify-ai` when Diagramify is a project dependency. Substitute `dia
 
 ## Generate
 
+Use `--offline` for analysis without inference or viewer network requests.
+Use `--local-model <id>` for an installed Ollama model.
+Use `--prepare` to print evidence and an output schema for the caller agent.
+
 Generate from a repository:
 
 ```bash
@@ -50,11 +54,15 @@ Provider keys:
 
 | Provider | Environment variable | Default model |
 |---|---|---|
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
 | Google | `GOOGLE_GENERATIVE_AI_API_KEY` or `GEMINI_API_KEY` | `gemini-2.5-flash` |
 
 ## Render
+
+JSON files contain graph documents by default.
+Use `--input-format json` when reading a graph from stdin.
+Use `render proposal.json --request request.json` to complete a caller proposal with preserved source findings.
 
 Render and validate an existing source:
 
