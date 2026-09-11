@@ -1,6 +1,6 @@
 {
   "name": "diagramify-ai",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Open-source architecture mapping and rendering engine with interactive HTML, images, PDF, CLI, React, and agent support.",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,6 +21,7 @@
   "files": [
     "dist/",
     "skills/",
+    "docs/",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -29,10 +30,13 @@
     "CODE_OF_CONDUCT.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "npm run build:viewer && tsup",
+    "build:viewer": "node scripts/build-viewer.mjs",
     "build:icons": "node scripts/build-icons.mjs",
-    "dev": "tsup --watch",
-    "test": "vitest run",
+    "dev": "node scripts/dev.mjs",
+    "test": "npm run build:viewer && vitest run",
+    "test:browser": "playwright test",
+    "benchmark:viewer": "node scripts/benchmark-viewer.mjs",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run audit:prod",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "test:watch": "vitest",
@@ -65,16 +69,21 @@
     "fast-glob": "^3.3.0",
     "ignore": "^5.3.0",
     "sharp": "^0.35.4",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.63.0",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
+    "esbuild": "^0.27.7",
     "eslint": "^9.39.5",
     "np": "^12.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "simple-icons": "^16.20.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",

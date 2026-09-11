@@ -12,7 +12,22 @@
 
 import { readFile, stat } from 'fs/promises';
 import { join, relative } from 'path';
-import glob from 'fast-glob';
+import fastGlob from 'fast-glob';
+
+type GlobPatterns = Parameters<typeof fastGlob>[0];
+type GlobOptions = NonNullable<Parameters<typeof fastGlob>[1]>;
+
+/**
+ * fast-glob follows symbolic links by default. A symlink inside an analyzed
+ * codebase could point outside the codebase root, at a real secret file
+ * (see the class-level note above on why env values are never read — a
+ * followed symlink named like an env/infra file would bypass that filename
+ * based care). Every glob call in this file goes through this wrapper so
+ * symlinks are never followed.
+ */
+function glob(patterns: GlobPatterns, options: GlobOptions = {}): Promise<string[]> {
+  return fastGlob(patterns, { ...options, followSymbolicLinks: false });
+}
 
 export interface Evidence {
   /** Service name, as the icon registry spells it. */
@@ -35,7 +50,7 @@ export interface Evidence {
  */
 export const ENV_NAME_PATTERNS: Array<{ pattern: RegExp; service: string }> = [
   // Data stores
-  { pattern: /\b(DATABASE_URL|POSTGRES|PG_(URI|HOST|USER)|PGHOST)\b/i, service: 'PostgreSQL' },
+  { pattern: /\b(POSTGRES|PG_(URI|HOST|USER)|PGHOST)\b/i, service: 'PostgreSQL' },
   { pattern: /\bMYSQL|MARIADB\b/i, service: 'MySQL' },
   { pattern: /\bMONGO(DB)?_(URI|URL|HOST)\b/i, service: 'MongoDB' },
   { pattern: /\bREDIS_(URL|URI|HOST|TLS)\b/i, service: 'Redis' },
@@ -44,9 +59,12 @@ export const ENV_NAME_PATTERNS: Array<{ pattern: RegExp; service: string }> = [
   { pattern: /\bCASSANDRA|SCYLLA\b/i, service: 'Cassandra' },
   { pattern: /\bCLICKHOUSE\b/i, service: 'ClickHouse' },
   { pattern: /\bELASTIC(SEARCH)?_|OPENSEARCH_/i, service: 'Elasticsearch' },
-  { pattern: /\bNEON_|PLANETSCALE_|SUPABASE_(URL|KEY|ANON)/i, service: 'Supabase' },
+  { pattern: /\bNEON_/i, service: 'Neon' },
+  { pattern: /\bPLANETSCALE_/i, service: 'PlanetScale' },
+  { pattern: /\bSUPABASE_(URL|KEY|ANON)/i, service: 'Supabase' },
   { pattern: /\bUPSTASH_/i, service: 'Upstash' },
-  { pattern: /\bSNOWFLAKE_|BIGQUERY_/i, service: 'BigQuery' },
+  { pattern: /\bSNOWFLAKE_/i, service: 'Snowflake' },
+  { pattern: /\bBIGQUERY_/i, service: 'BigQuery' },
 
   // Messaging
   { pattern: /\bKAFKA_|CONFLUENT_/i, service: 'Kafka' },
@@ -107,7 +125,9 @@ export const ENV_NAME_PATTERNS: Array<{ pattern: RegExp; service: string }> = [
   { pattern: /\bHUGGINGFACE_|HF_TOKEN/i, service: 'Hugging Face' },
   { pattern: /\bREPLICATE_/i, service: 'Replicate' },
   { pattern: /\bPINECONE_/i, service: 'Pinecone' },
-  { pattern: /\bWEAVIATE_|QDRANT_|CHROMA_/i, service: 'Qdrant' },
+  { pattern: /\bWEAVIATE_/i, service: 'Weaviate' },
+  { pattern: /\bQDRANT_/i, service: 'Qdrant' },
+  { pattern: /\bCHROMA_/i, service: 'Chroma' },
   { pattern: /\bLANGFUSE_/i, service: 'Langfuse' },
   { pattern: /\bLANGSMITH_|LANGCHAIN_TRACING/i, service: 'LangSmith' },
   { pattern: /\bDEEPGRAM_|ASSEMBLYAI_/i, service: 'Deepgram' },
@@ -133,7 +153,8 @@ export const ENV_NAME_PATTERNS: Array<{ pattern: RegExp; service: string }> = [
 
   // Search and other
   { pattern: /\bALGOLIA_/i, service: 'Algolia' },
-  { pattern: /\bTYPESENSE_|MEILISEARCH_/i, service: 'Typesense' },
+  { pattern: /\bTYPESENSE_/i, service: 'Typesense' },
+  { pattern: /\bMEILISEARCH_/i, service: 'Meilisearch' },
   { pattern: /\bSLACK_/i, service: 'Slack' },
   { pattern: /\bHUBSPOT_/i, service: 'HubSpot' },
   { pattern: /\bSALESFORCE_/i, service: 'Salesforce' },

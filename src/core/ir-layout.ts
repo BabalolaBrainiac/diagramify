@@ -140,18 +140,21 @@ export function readExtent(svg: string): DiagramExtent {
  * Returns a new graph. The input is left alone, so a caller can still compare
  * a layout-free graph for drift.
  */
-export function attachLayout(graph: ArchitectureGraph, svg: string): ArchitectureGraph {
+export function attachLayout(graph: ArchitectureGraph, svg: string, preserveExisting = false): ArchitectureGraph {
   const fragments = nodeFragments(svg);
   const points = edgePoints(svg);
+  const savedNodes = new Set(graph.nodes.filter(node => node.layout).map(node => node.id));
 
   return {
     ...graph,
     nodes: graph.nodes.map((node) => {
+      if (preserveExisting && node.layout) return { ...node };
       const fragment = fragments.get(node.id);
       const box = fragment ? shapeBox(fragment) : null;
       return box ? { ...node, layout: box } : { ...node };
     }),
     edges: graph.edges.map((edge) => {
+      if (preserveExisting && (edge.points || savedNodes.has(edge.from) || savedNodes.has(edge.to))) return { ...edge };
       const point = points.get(`${edge.from}>${edge.to}`);
       return point ? { ...edge, points: point } : { ...edge };
     }),

@@ -1,5 +1,14 @@
-export { generateDiagram } from './core/generate.js';
-export { renderDiagram } from './core/render.js';
+export { generateDiagram, prepareArchitecture, completeArchitecture } from './core/generate.js';
+export { renderDiagram, renderGraph } from './core/render.js';
+export { createOllamaEngine } from './core/ollama.js';
+export type { OllamaOptions } from './core/ollama.js';
+export type { ArchitectureEngine, ArchitectureRequest } from './core/engines.js';
+export { readGraphDocument, serializeGraphDocument, graphDocumentSchema } from './core/graph-document.js';
+export { assessGraph } from './core/graph-quality.js';
+export { createGraphSession, applyGraphOperations, identifyGraph, GraphConflictError } from './core/graph-session.js';
+export type { GraphOperation, GraphSnapshot } from './core/graph-session.js';
+export { createPreviewServer } from './core/preview-server.js';
+export type { GraphQuality } from './core/graph-quality.js';
 export { analyzeCodebase } from './core/analyze.js';
 export { loadConfig } from './core/config.js';
 export { resolveModel, callLLM } from './core/provider.js';
@@ -31,6 +40,8 @@ export {
 export type {
   ArchitectureGraph,
   ArchitectureGraphInput,
+  ClaimStatus,
+  SourceReference,
   Direction,
   EdgeKind,
   IREdge,

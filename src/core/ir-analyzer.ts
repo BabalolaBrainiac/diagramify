@@ -195,7 +195,7 @@ export function analysisToGraph(
 
   const modules = dedupe(analysis.serviceDirectories ?? []);
   if (modules.length > 0) {
-    for (const moduleName of modules.slice(0, 36)) {
+    for (const moduleName of modules) {
       const label = titleCase(moduleName);
       let id = safeId(label, 'mod');
       let suffix = 2;
@@ -212,6 +212,9 @@ export function analysisToGraph(
         shape: 'rect',
         serviceType: 'compute',
         description: `Internal module detected at ${moduleName}.`,
+        status: 'observed',
+        evidence: (analysis.componentSources ?? []).filter(item => item.component === moduleName)
+          .map(item => ({ source: item.source, hint: moduleName })),
       };
       coreNodes.push(node);
       addNode(node, { id: 'backend', label: 'Backend Services' });
@@ -225,6 +228,7 @@ export function analysisToGraph(
       shape: 'rect',
       serviceType: 'compute',
       description: analysis.language ? `${analysis.language} application.` : undefined,
+      status: 'observed',
     };
     coreNodes.push(node);
     addNode(node, { id: 'backend', label: 'Backend Services' });
@@ -241,6 +245,8 @@ export function analysisToGraph(
       shape: 'rect',
       serviceType: 'middleware',
       description: `${analysis.apiEndpoints.length} HTTP endpoints detected.`,
+      status: 'observed',
+      evidence: analysis.apiEndpoints.map(endpoint => ({ source: endpoint.file, hint: endpoint.path })),
     };
     addNode(apiNode, { id: 'backend', label: 'Backend Services' });
   }
@@ -280,6 +286,10 @@ export function analysisToGraph(
       description: dependencyByName.get(serviceName.toLowerCase())?.version
         ? `Version ${dependencyByName.get(serviceName.toLowerCase())!.version}.`
         : undefined,
+      status: 'observed',
+      evidence: (analysis.evidence ?? [])
+        .filter(item => lookupKey(getServiceDefinition(item.service).name === 'Service' ? item.service : getServiceDefinition(item.service).name) === lookupKey(candidate.label))
+        .map(item => ({ source: item.source, hint: item.hint })),
     };
     addNode(node, tier);
     serviceIdByName.set(lookupKey(serviceName), node.id);
@@ -296,12 +306,12 @@ export function analysisToGraph(
   const entry = apiNode ?? coreNodes[0];
 
   for (const caller of upstream) {
-    graph.edges.push({ from: caller.id, to: entry.id, label: 'HTTP', kind: 'sync', bidirectional: false });
+    graph.edges.push({ from: caller.id, to: entry.id, label: 'HTTP', kind: 'sync', bidirectional: false, status: 'inferred' });
   }
 
   if (apiNode) {
     for (const module of coreNodes) {
-      graph.edges.push({ from: apiNode.id, to: module.id, label: 'routes', kind: 'sync', bidirectional: false });
+      graph.edges.push({ from: apiNode.id, to: module.id, label: 'routes', kind: 'sync', bidirectional: false, status: 'inferred' });
     }
   }
 
@@ -310,7 +320,8 @@ export function analysisToGraph(
     const from = moduleIdByName.get(lookupKey(link.from));
     const to = moduleIdByName.get(lookupKey(link.to));
     if (from && to && from !== to) {
-      graph.edges.push({ from, to, label: 'uses', kind: 'sync', bidirectional: false });
+      graph.edges.push({ from, to, label: 'uses', kind: 'sync', bidirectional: false, status: 'observed',
+        evidence: link.source ? [{ source: link.source, hint: 'source dependency' }] : undefined });
     }
   }
 
@@ -328,14 +339,15 @@ export function analysisToGraph(
       label: link.label,
       kind: link.kind,
       bidirectional: false,
+      status: link.label === 'depends on' ? 'observed' : 'inferred',
+      evidence: [{ source: link.source, hint: link.label }],
     });
   }
 
-  // Infrastructure hangs off the core. With modules, attach to the first one,
-  // because the analysis cannot prove which module owns which store.
+  // A single application can own a dependency. Multiple modules need explicit ownership evidence.
   const infrastructureOwner = coreNodes[0];
   for (const service of downstream) {
-    if (linkedServiceIds.has(service.id)) {
+    if (linkedServiceIds.has(service.id) || coreNodes.length > 1) {
       continue;
     }
     const edgeStyle = EDGE_LABEL_BY_SERVICE_TYPE[service.serviceType] ?? { label: 'uses', kind: 'sync' as const };
@@ -345,6 +357,7 @@ export function analysisToGraph(
       label: edgeStyle.label,
       kind: edgeStyle.kind,
       bidirectional: false,
+      status: 'inferred',
     });
   }
 
@@ -366,7 +379,7 @@ function dropDuplicateEdges(graph: ArchitectureGraph): ArchitectureGraph {
   const edges: IREdge[] = [];
 
   for (const edge of graph.edges) {
-    const key = `${edge.from}>${edge.to}`;
+    const key = JSON.stringify([edge.from, edge.to, edge.kind, edge.label ?? '']);
     if (seen.has(key)) {
       continue;
     }

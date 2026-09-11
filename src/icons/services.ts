@@ -852,6 +852,50 @@ export function getServiceDefinition(name: string): ServiceDefinition {
   return serviceRegistry.service;
 }
 
+export interface ServiceClassification {
+  type: ServiceType;
+  color: string;
+  backgroundColor: string;
+  simpleIconSlug?: string;
+}
+
+/**
+ * Classifies a node label into a service type, color, and icon slug.
+ *
+ * This is the single source of truth for "what type is this node" -- used
+ * both when a diagram is first rendered and by the live editor when it
+ * reconciles cards against the graph. The two must agree: a node classified
+ * as 'middleware' by one and 'other' by the other means the sidebar legend
+ * and the actual node no longer match, so legend filtering silently stops
+ * working for that node the moment the editor touches the page.
+ *
+ * getServiceDefinition only recognizes names in the fixed registry above and
+ * falls back to a generic 'other' entry for everything else, so labels like
+ * "Auth Service" or "API Gateway" are re-classified here using a handful of
+ * keyword heuristics before giving up and calling them 'other'.
+ */
+export function classifyService(label: string): ServiceClassification {
+  const definition = getServiceDefinition(label);
+  if (definition.name !== 'Service') {
+    return {
+      type: definition.type,
+      color: definition.color,
+      backgroundColor: definition.backgroundColor,
+      simpleIconSlug: definition.simpleIconSlug,
+    };
+  }
+  if (/worker|job|consumer|scheduler/i.test(label)) {
+    return { type: 'compute', color: '#6366f1', backgroundColor: '#eef2ff' };
+  }
+  if (/endpoint|api|gateway/i.test(label)) {
+    return { type: 'middleware', color: '#0f766e', backgroundColor: '#f0fdfa' };
+  }
+  if (/module|service|component/i.test(label)) {
+    return { type: 'compute', color: '#475569', backgroundColor: '#f1f5f9' };
+  }
+  return { type: 'other', color: '#94a3b8', backgroundColor: '#f5f5f5' };
+}
+
 /**
  * Get all services of a specific type
  */

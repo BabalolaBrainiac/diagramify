@@ -1,8 +1,11 @@
 import type { RenderOptions } from './types.js';
-import { getServiceDefinition } from '../icons/services.js';
+import { classifyService } from '../icons/services.js';
 import { getIconURL, getFallbackSVG } from '../icons/simple-icons.js';
 import { mermaidToGraph } from './ir-mermaid.js';
 import type { ArchitectureGraph } from './ir.js';
+import { sessionScript } from '../viewer/session.generated.js';
+import { createObstacleIndex, routeLabelAnchor } from '../viewer/geometry.js';
+import { readGraphDocument } from './graph-document.js';
 
 export interface HTMLGeneratorOptions extends RenderOptions {
   showMinimap?: boolean;
@@ -107,26 +110,13 @@ function serializeForScript(value: unknown): string {
 }
 
 function getServiceInfo(label: string): ServiceInfo {
-  const normalized = label.toLowerCase();
-  const def = getServiceDefinition(normalized);
-  if (def && def.name !== 'Service') {
-    return {
-      type: def.type,
-      color: def.color,
-      bgColor: def.backgroundColor,
-      slug: def.simpleIconSlug || normalized,
-    };
-  }
-  if (/worker|job|consumer|scheduler/i.test(label)) {
-    return { type: 'compute', color: '#6366f1', bgColor: '#eef2ff', slug: normalized };
-  }
-  if (/endpoint|api|gateway/i.test(label)) {
-    return { type: 'middleware', color: '#0f766e', bgColor: '#f0fdfa', slug: normalized };
-  }
-  if (/module|service|component/i.test(label)) {
-    return { type: 'compute', color: '#475569', bgColor: '#f1f5f9', slug: normalized };
-  }
-  return { type: 'other', color: '#94a3b8', bgColor: '#f5f5f5' };
+  const classification = classifyService(label);
+  return {
+    type: classification.type,
+    color: classification.color,
+    bgColor: classification.backgroundColor,
+    slug: classification.simpleIconSlug || label.toLowerCase(),
+  };
 }
 
 // Every ServiceType the analyzer can assign, in the order the legend shows
@@ -222,6 +212,24 @@ export function generateInteractiveHTML(
       : 'light';
 
   const layout = extractFromSVG(svgContent);
+  const graphNodes = new Map(options.graph?.nodes.map(node => [node.id, node]));
+  if (options.graph) {
+    const ids = new Set(options.graph.nodes.map(node => node.id));
+    layout.nodes = layout.nodes.filter(node => ids.has(node.id));
+    const placed = new Set(layout.nodes.map(node => node.id));
+    for (const [index, node] of options.graph.nodes.entries()) {
+      if (!placed.has(node.id)) {
+        layout.nodes.push({ id: node.id, label: node.label, ...(node.layout ??
+          { x: 80 + index % 5 * 200, y: 80 + Math.floor(index / 5) * 100, width: 160, height: 50 }) });
+      }
+    }
+  }
+  layout.nodes.forEach(node => {
+    const saved = graphNodes.get(node.id)?.layout;
+    if (saved) Object.assign(node, saved);
+    const label = graphNodes.get(node.id)?.label;
+    if (label) node.label = label;
+  });
 
   // Offline mode must make no network request. The system font stack replaces
   // the web font, and every script is already inline.
@@ -236,14 +244,15 @@ export function generateInteractiveHTML(
 
   // Legend rows for just the service types this diagram actually contains.
   const presentServiceTypes = new Set(layout.nodes.map((node) => getServiceInfo(node.label).type));
-  const legendHTML = renderLegendItems(presentServiceTypes);
 
-  const canvasW = layout.viewBox.w + 40;
-  const canvasH = layout.viewBox.h + 40;
+  const canvasW = Math.max(layout.viewBox.w, ...layout.nodes.map(node => node.x + node.width)) + 40;
+  const canvasH = Math.max(layout.viewBox.h, ...layout.nodes.map(node => node.y + node.height)) + 40;
 
   // Serialize layout data for the client script
   const NODE_DATA = layout.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, w: n.width, h: n.height }));
-  const EDGE_DATA = layout.edges.map((e) => ({ from: e.from, to: e.to, label: e.label ?? '', dashed: e.dashed }));
+  const EDGE_DATA = options.graph
+    ? options.graph.edges.map(edge => ({ ...edge, label: edge.label ?? '', dashed: edge.kind === 'async' }))
+    : layout.edges.map(edge => ({ ...edge, label: edge.label ?? '' }));
 
   // The graph a canvas edit applies to, so a renamed label or a dragged
   // node can be exported back out as an updated source file. The `generate`
@@ -253,7 +262,7 @@ export function generateInteractiveHTML(
   let editableGraph: ArchitectureGraph | null = options.graph ?? null;
   if (!editableGraph) {
     try {
-      editableGraph = mermaidToGraph(mermaidSource, options.title);
+      editableGraph = readGraphDocument(mermaidToGraph(mermaidSource, options.title));
     } catch {
       // A source the parser cannot read still renders (see extractFromSVG
       // above); it only loses the "export edited source" feature.
@@ -271,13 +280,13 @@ export function generateInteractiveHTML(
 ${fontImport}
     :root {
       --bg:#f8fafc; --surface:#ffffff; --text:#0f172a; --text-muted:#64748b;
-      --edge-color:#94a3b8; --edge-color-active:#3b82f6;
+      --edge-color:#64748b; --edge-color-active:#2563eb;
       --subgraph-bg:rgba(15,23,42,0.025); --subgraph-border:rgba(15,23,42,0.16);
       --panel-shadow:0 1px 3px rgba(0,0,0,0.06),0 4px 12px rgba(0,0,0,0.04);
     }
     html[data-theme="dark"] {
       --bg:#0a0a0f; --surface:#15151f; --text:#e2e8f0; --text-muted:#94a3b8;
-      --edge-color:#475569; --edge-color-active:#60a5fa;
+      --edge-color:#94a3b8; --edge-color-active:#60a5fa;
       --subgraph-bg:rgba(255,255,255,0.025); --subgraph-border:rgba(255,255,255,0.10);
       --panel-shadow:0 8px 24px rgba(0,0,0,0.3);
     }
@@ -347,7 +356,7 @@ ${fontImport}
     .edge-path.dashed{stroke-dasharray:5 5;}
     /* A halo in the page colour keeps the text readable over whatever it
        crosses, without a filled box that hides the line underneath. */
-    .edge-label-text{font-size:10px;fill:var(--text-muted);font-weight:500;opacity:0.75;
+    .edge-label-text{font-size:10px;fill:var(--text-muted);font-weight:500;opacity:1;
       paint-order:stroke fill;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round;
       pointer-events:none;transition:opacity 0.15s;}
     .edge-label-text.edge-label-secondary{opacity:0;}
@@ -373,7 +382,8 @@ ${fontImport}
     body.edit-mode .dfy-label:hover{outline:1px dashed var(--edge-color-active);border-radius:2px;}
     .dfy-label[contenteditable="true"]{outline:2px solid var(--edge-color-active);cursor:text;background:var(--bg);padding:1px 4px;border-radius:3px;white-space:normal;pointer-events:auto;}
     .dfy-badge{display:none;}
-    .dfy-node.dimmed,.dfy-node.edge-dimmed{opacity:0.18;filter:grayscale(100%);transition:opacity 0.3s,filter 0.3s;}
+    .dfy-node.dimmed,.dfy-node.edge-dimmed{opacity:1;filter:grayscale(100%);box-shadow:none;border-style:dashed;}
+    .dfy-node.dimmed .dfy-label,.dfy-node.edge-dimmed .dfy-label{color:var(--text-muted);}
     html[data-theme="dark"] .dfy-node,html[data-theme="tokyo-night"] .dfy-node,html[data-theme="nord"] .dfy-node,html[data-theme="catppuccin"] .dfy-node{border-color:color-mix(in srgb,var(--brand) 40%,transparent);border-left:3px solid var(--brand);}
     html[data-theme="dark"] .dfy-label,html[data-theme="tokyo-night"] .dfy-label,html[data-theme="nord"] .dfy-label,html[data-theme="catppuccin"] .dfy-label{color:var(--text);}
     .footer-tip{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:var(--surface);padding:8px 14px;border-radius:8px;box-shadow:var(--panel-shadow);font-size:11px;color:var(--text-muted);display:flex;gap:12px;align-items:center;z-index:30;}
@@ -441,6 +451,8 @@ ${fontImport}
       border-radius: 2px;
       padding: 0 1px;
     }
+    #dfy-update-notice { position:absolute;left:20px;bottom:20px;z-index:30;padding:12px 16px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);box-shadow:0 4px 16px #0002; }
+    #dfy-update-notice button { margin-left:12px;cursor:pointer; }
     .dfy-detail-panel {
       position: fixed;
       top: 0; right: 0; bottom: 0;
@@ -517,6 +529,23 @@ ${fontImport}
       box-sizing: border-box;
       pointer-events: none;
     }
+    :focus-visible{outline:2px solid var(--edge-color-active);outline-offset:3px;}
+    .canvas-wrap{min-width:0;scrollbar-color:var(--text-muted) var(--surface);}
+    .dfy-minimap-viewport{background:color-mix(in srgb,var(--edge-color-active) 10%,transparent);}
+    .dfy-detail-panel{max-width:100vw;}
+    @media(max-width:900px){
+      .header{padding:8px 12px;gap:8px;}
+      .header h1{flex-basis:100%;}
+      .btn-group{flex-wrap:wrap;}
+      .footer-tip{display:none;}
+      .sidebar{width:190px;}
+    }
+    @media(max-width:600px){
+      .sidebar{position:absolute;inset:0 auto 0 0;z-index:40;box-shadow:var(--panel-shadow);}
+      .main{position:relative;}
+      .sidebar-resize{display:none;}
+      .dfy-minimap{width:120px;height:90px;right:8px;bottom:8px;}
+    }
     html:fullscreen .dfy-sidebar { display: none; }
 
   </style>
@@ -574,12 +603,12 @@ ${fontImport}
           </div>
         </div>` : ''}
         <h3>Service Types</h3>
-        ${legendHTML}
+        <div id="type-legend">${renderLegendItems(presentServiceTypes)}</div>
         <h3>Edges</h3>
         <div class="legend-item"><span class="legend-line"></span><span class="legend-label">Synchronous</span><span class="legend-detail">REST / SQL</span></div>
         <div class="legend-item"><span class="legend-line dashed"></span><span class="legend-label">Async / Event</span><span class="legend-detail">Queue / pub-sub</span></div>
-        ${options.showLayerPanel !== false ? `<h3>Layers</h3>
-        <div id="layer-list" style="font-size:12px;"></div>` : ''}
+        ${options.showLayerPanel !== false ? `<div id="layer-panel"><h3>Layers</h3>
+        <div id="layer-list" style="font-size:12px;"></div></div>` : ''}
         <h3>Interactions</h3>
         <div class="legend-item"><span class="legend-label">Click Legend</span><span class="legend-detail">toggle type filter</span></div>
         <div class="legend-item"><span class="legend-label">Drag</span><span class="legend-detail">card → reposition</span></div>
@@ -617,8 +646,8 @@ ${fontImport}
        first pass, and a lookup before the markup exists returns null, which
        silently disables the minimap and the node detail panel. -->
   ${options.showNodeDetail !== false ? `
-  <div id="dfy-detail" class="dfy-detail-panel">
-    <button id="dfy-detail-close">&times;</button>
+  <div id="dfy-detail" class="dfy-detail-panel" role="region" aria-label="Component details" aria-live="polite">
+    <button id="dfy-detail-close" aria-label="Close component details">&times;</button>
     <div id="dfy-detail-content"></div>
   </div>
   ` : ''}
@@ -629,20 +658,22 @@ ${fontImport}
   </div>
   ` : ''}
 
+  <script>${sessionScript.replace(/<\/script/gi, '<\\/script')}</script>
   <script>
     const NODES = ${serializeForScript(NODE_DATA)};
-    const EDGES = ${serializeForScript(EDGE_DATA)};
+    let EDGES = ${serializeForScript(EDGE_DATA)};
     const VIEWBOX = ${serializeForScript(layout.viewBox)};
+    const LEGEND_META = ${serializeForScript(LEGEND_ITEMS)};
     const MERMAID_SRC = ${serializeForScript(mermaidSource)};
-    const IR_GRAPH = ${serializeForScript(editableGraph)};
+    let IR_GRAPH = ${serializeForScript(editableGraph)};
     const TITLE_SAFE = ${serializeForScript(title.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'diagram')};
     const canvas = document.getElementById('canvas');
     const edgesGroup = document.getElementById('edges-group');
-    const cardMap = {};
+    const cardMap = Object.create(null);
     const hiddenEdgeKeys = new Set();
 
     function edgeKey(edge) {
-      return edge.from + '>' + edge.to + '>' + (edge.label || '');
+      return edge.id || JSON.stringify([edge.from, edge.to, edge.label || '', Boolean(edge.dashed)]);
     }
     
     // Built-in pan and zoom.
@@ -737,7 +768,7 @@ ${fontImport}
 
     // Fit-to-content: after first render, scale + pan so all nodes are visible
     function fitToContent() {
-      if (!pz || !NODES.length) return;
+      if (!pz) return;
       const vpW = canvasWrap.clientWidth;
       const vpH = canvasWrap.clientHeight;
       // Use live card positions
@@ -779,10 +810,13 @@ ${fontImport}
       });
     });
     
+    const cardSizes = new WeakMap();
     function center(card) {
       const cx = parseFloat(card.dataset.cx);
       const cy = parseFloat(card.dataset.cy);
-      return { x: cx, y: cy, w: card.offsetWidth, h: card.offsetHeight };
+      let size = cardSizes.get(card);
+      if (!size) { size = { w: card.offsetWidth, h: card.offsetHeight }; cardSizes.set(card, size); }
+      return { x: cx, y: cy, w: size.w, h: size.h };
     }
     function anchor(a, b) {
       const dx = b.x - a.x, dy = b.y - a.y;
@@ -791,11 +825,97 @@ ${fontImport}
         ? { x: a.x + Math.sign(dx) * a.w / 2, y: a.y }
         : { x: a.x, y: a.y + Math.sign(dy) * a.h / 2 };
     }
-    // Orthogonal elbow router: exits source on the dominant axis, pivots at midpoint,
-    // enters target from the correct side. Produces neat L/Z-shapes instead of long
-    // diagonal arcs that span across the whole diagram.
-    function routePath(a, b) {
+    // Read visible card geometry once per redraw.
+    function currentBoxes() {
+      return Object.values(cardMap)
+        .filter(card => card.isConnected && card.style.display !== 'none' && !card.dataset.dfyHidden)
+        .map(card => {
+          const c = center(card);
+          return { card, left: c.x - c.w / 2, right: c.x + c.w / 2, top: c.y - c.h / 2, bottom: c.y + c.h / 2 };
+        });
+    }
+    function rangesOverlap(a0, a1, b0, b1) {
+      return Math.min(a0, a1) < Math.max(b0, b1) && Math.max(a0, a1) > Math.min(b0, b1);
+    }
+    function hSegHitsBox(y, x0, x1, box) {
+      return box.top < y && y < box.bottom && rangesOverlap(x0, x1, box.left, box.right);
+    }
+    function vSegHitsBox(x, y0, y1, box) {
+      return box.left < x && x < box.right && rangesOverlap(y0, y1, box.top, box.bottom);
+    }
+    // Picks the crossing coordinate (mx for a horizontal-primary route, my
+    // for vertical-primary) for the three-leg elbow: exit-row, cross,
+    // enter-row. The natural choice is the midpoint, but that only clears
+    // the *crossing* segment -- the two approach legs run the entire width
+    // (or height) at the source's and target's own row (or column), so a
+    // third node sharing that row/column anywhere along the way still gets
+    // cut through no matter where the crossing sits. So every candidate is
+    // checked against the WHOLE three-leg path, not just the middle piece.
+    // Candidates are generated just outside every obstacle's edge; the one
+    // closest to the natural midpoint that leaves all three legs clear
+    // wins. Falls back to the midpoint if no candidate fully clears (a
+    // route through a crowded pocket still beats one that silently ignores
+    // the obstacle).
+    function horizPathClear(mx, sx, sy, ex, ey, boxes) {
+      return !boxes.some(b => hSegHitsBox(sy, sx, mx, b) || vSegHitsBox(mx, sy, ey, b) || hSegHitsBox(ey, mx, ex, b));
+    }
+    function chooseHorizPivot(sx, sy, ex, ey, boxes, gap) {
+      const mid = (sx + ex) / 2;
+      if (!boxes.length || horizPathClear(mid, sx, sy, ex, ey, boxes)) return mid;
+      const low = Math.min(sx, ex), high = Math.max(sx, ex);
+      const candidates = boxes.flatMap(b => [b.left - gap, b.right + gap])
+        .filter(x => x > low + 12 && x < high - 12)
+        .filter(x => horizPathClear(x, sx, sy, ex, ey, boxes));
+      candidates.sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid));
+      return candidates.length ? candidates[0] : mid;
+    }
+    function vertPathClear(my, sx, sy, ex, ey, boxes) {
+      return !boxes.some(b => vSegHitsBox(sx, sy, my, b) || hSegHitsBox(my, sx, ex, b) || vSegHitsBox(ex, my, ey, b));
+    }
+    function chooseVertPivot(sx, sy, ex, ey, boxes, gap) {
+      const mid = (sy + ey) / 2;
+      if (!boxes.length || vertPathClear(mid, sx, sy, ex, ey, boxes)) return mid;
+      const low = Math.min(sy, ey), high = Math.max(sy, ey);
+      const candidates = boxes.flatMap(b => [b.top - gap, b.bottom + gap])
+        .filter(y => y > low + 12 && y < high - 12)
+        .filter(y => vertPathClear(y, sx, sy, ex, ey, boxes));
+      candidates.sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid));
+      return candidates.length ? candidates[0] : mid;
+    }
+    // Try a lane outside the blocked corridor. Validate all five segments.
+    function routeDetour(sx, sy, ex, ey, horiz, boxes, index) {
+      const lanes = Array.from(new Set(boxes.flatMap(box => horiz ?
+        [box.top - 16, box.bottom + 16] : [box.left - 16, box.right + 16])));
+      const mid = horiz ? (sy + ey) / 2 : (sx + ex) / 2;
+      lanes.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
+      const sign = Math.sign(horiz ? ex - sx : ey - sy) || 1;
+      for (const lane of lanes) {
+        const points = horiz ? [[sx, sy], [sx + sign * 12, sy], [sx + sign * 12, lane],
+          [ex - sign * 12, lane], [ex - sign * 12, ey], [ex, ey]] :
+          [[sx, sy], [sx, sy + sign * 12], [lane, sy + sign * 12],
+          [lane, ey - sign * 12], [ex, ey - sign * 12], [ex, ey]];
+        const clear = points.slice(1).every((end, i) => {
+          const start = points[i];
+          return !index.query(Math.min(start[0], end[0]), Math.min(start[1], end[1]),
+            Math.max(start[0], end[0]), Math.max(start[1], end[1])).some(box =>
+            start[1] === end[1] ? hSegHitsBox(start[1], start[0], end[0], box) :
+              vSegHitsBox(start[0], start[1], end[1], box));
+        });
+        if (clear) return points.map((point, i) => (i ? 'L ' : 'M ') + point.join(' ')).join(' ');
+      }
+      return null;
+    }
+    // Orthogonal elbow router: exits source on the dominant axis, pivots
+    // between the two boxes (steering around any other node in the way),
+    // enters target from the correct side. Produces neat L/Z-shapes instead
+    // of long diagonal arcs that span across the whole diagram.
+    function routePath(a, b, obstacleIndex) {
       const ac = center(a), bc = center(b);
+      if (a === b) {
+        const right = ac.x + ac.w / 2 + 8, top = ac.y - ac.h / 2 - 8;
+        return 'M ' + right + ' ' + ac.y + ' L ' + (right + 30) + ' ' + ac.y +
+          ' L ' + (right + 30) + ' ' + (top - 24) + ' L ' + ac.x + ' ' + (top - 24) + ' L ' + ac.x + ' ' + top;
+      }
       const dx = bc.x - ac.x, dy = bc.y - ac.y;
       const horiz = Math.abs(dx) > Math.abs(dy);
       const gap = 8;
@@ -816,12 +936,21 @@ ${fontImport}
       // Elbow waypoint: mid-x for horizontal-primary, mid-y for vertical-primary
       // Use a small rounding radius (r) on the corner so it doesn't look angular
       const r = 6;
+      const boxes = obstacleIndex.query(Math.min(sx, ex) - r, Math.min(sy, ey) - r,
+        Math.max(sx, ex) + r, Math.max(sy, ey) + r).filter(o => o.card !== a && o.card !== b);
       if (horiz) {
-        const mx = (sx + ex) / 2;
-        // Z-shape: → pivot ↕ → 
-        if (Math.abs(sy - ey) < r * 2) {
-          // nearly same row: straight line
+        // Z-shape: → pivot ↕ →
+        // Nearly same row: a straight line, unless a third node's row also
+        // overlaps this line -- e.g. A and C in the same row with B between
+        // them -- in which case the elbow below (which already steers
+        // around obstacles) is used instead of cutting straight through B.
+        if (Math.abs(sy - ey) < r * 2 && !boxes.some(o => hSegHitsBox((sy + ey) / 2, sx, ex, o))) {
           return 'M ' + sx + ' ' + sy + ' L ' + ex + ' ' + ey;
+        }
+        const mx = chooseHorizPivot(sx, sy, ex, ey, boxes, gap);
+        if (!horizPathClear(mx, sx, sy, ex, ey, boxes)) {
+          const detour = routeDetour(sx, sy, ex, ey, true, boxes, obstacleIndex);
+          if (detour) return detour;
         }
         const d1y = Math.sign(ey - sy);
         return 'M ' + sx + ' ' + sy +
@@ -831,10 +960,15 @@ ${fontImport}
                ' Q ' + mx + ' ' + ey + ' ' + (mx + r) + ' ' + ey +
                ' L ' + ex + ' ' + ey;
       } else {
-        const my = (sy + ey) / 2;
         // Z-shape: ↓ pivot → ↓
-        if (Math.abs(sx - ex) < r * 2) {
+        // Same reasoning as the horizontal case above, mirrored onto columns.
+        if (Math.abs(sx - ex) < r * 2 && !boxes.some(o => vSegHitsBox((sx + ex) / 2, sy, ey, o))) {
           return 'M ' + sx + ' ' + sy + ' L ' + ex + ' ' + ey;
+        }
+        const my = chooseVertPivot(sx, sy, ex, ey, boxes, gap);
+        if (!vertPathClear(my, sx, sy, ex, ey, boxes)) {
+          const detour = routeDetour(sx, sy, ex, ey, false, boxes, obstacleIndex);
+          if (detour) return detour;
         }
         const d1x = Math.sign(ex - sx);
         return 'M ' + sx + ' ' + sy +
@@ -853,65 +987,17 @@ ${fontImport}
      * describes.
      */
     function labelAnchor(pathEl, d) {
-      const LIFT = 9;
-      try {
-        const total = pathEl.getTotalLength();
-        if (total > 0) {
-          const steps = Math.max(8, Math.min(60, Math.round(total / 12)));
-          let best = { length: -1, mid: total / 2, dx: 1, dy: 0 };
-          let runStart = 0;
-          let prev = pathEl.getPointAtLength(0);
-          let prevDir = null;
-
-          const consider = (from, to) => {
-            const runLength = to - from;
-            if (runLength <= best.length) return;
-            const mid = from + runLength / 2;
-            const a = pathEl.getPointAtLength(Math.max(0, mid - 2));
-            const b = pathEl.getPointAtLength(Math.min(total, mid + 2));
-            best = { length: runLength, mid, dx: b.x - a.x, dy: b.y - a.y };
-          };
-
-          for (let i = 1; i <= steps; i += 1) {
-            const at = (total * i) / steps;
-            const point = pathEl.getPointAtLength(at);
-            const dir = Math.abs(point.x - prev.x) > Math.abs(point.y - prev.y) ? 'h' : 'v';
-            if (prevDir && dir !== prevDir) {
-              consider(runStart, at);
-              runStart = at;
-            }
-            prevDir = dir;
-            prev = point;
-          }
-          consider(runStart, total);
-
-          const at = pathEl.getPointAtLength(best.mid);
-          const norm = Math.hypot(best.dx, best.dy) || 1;
-          let nx = -best.dy / norm;
-          let ny = best.dx / norm;
-          // Always lift upward on screen, so a label never sits under its line.
-          if (ny > 0) { nx = -nx; ny = -ny; }
-          return {
-            x: at.x + nx * LIFT,
-            y: at.y + ny * LIFT,
-            tx: best.dx / norm,
-            ty: best.dy / norm,
-          };
-        }
-      } catch (_) {
-        // getTotalLength is unavailable before layout. Fall through.
-      }
-
-      const parts = String(d).match(/-?[\\d.]+/g) || ['0', '0'];
-      return { x: Number(parts[0]) || 0, y: (Number(parts[1]) || 0) - LIFT, tx: 1, ty: 0 };
+      return (${routeLabelAnchor.toString()})(d);
     }
 
     /** Moves a label along its line until it has clear space. */
+    const labelMeasure = document.createElement('canvas').getContext('2d');
     function separateLabel(anchor, label, placedLabels) {
-      const width = Math.max(28, String(label).length * 5.8 + 8);
+      labelMeasure.font = '500 10px ' + getComputedStyle(document.body).fontFamily;
+      const width = Math.max(28, labelMeasure.measureText(String(label)).width + 8);
       const height = 14;
       const shifts = [0, width * 0.7, -width * 0.7, width * 1.4, -width * 1.4];
-      const lifts = [0, 15, 30];
+      const lifts = [0, 18, -18, 36, -36, 54, -54, 72, -72];
 
       for (const lift of lifts) {
         for (const shift of shifts) {
@@ -945,98 +1031,139 @@ ${fontImport}
 
     const svg = document.getElementById('edges');
 
+    const edgeGroups = new Map();
+    const edgesByNode = new Map();
+    let fullEdgeRedraw = true;
+    const dirtyNodeIds = new Set();
+    EDGES.forEach(edge => {
+      [edge.from, edge.to].forEach(id => {
+        if (!edgesByNode.has(id)) edgesByNode.set(id, []);
+        edgesByNode.get(id).push(edge);
+      });
+    });
+
+    function createEdgeGroup(edge, key) {
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      group.setAttribute('class', 'edge-group');
+      group.setAttribute('data-edge-key', key);
+      const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      hitPath.setAttribute('class', 'edge-hit');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('marker-end', 'url(#dfy-arrow)');
+      group.append(hitPath, path);
+      group.hitPath = hitPath;
+      group.visiblePath = path;
+      group.addEventListener('click', ev => {
+        ev.stopPropagation();
+        document.querySelectorAll('.edge-group.active').forEach(item => item.classList.remove('active'));
+        group.classList.add('active');
+        svg.classList.add('has-active');
+        selectElement(group);
+        const current = group.edge;
+        document.querySelectorAll('.dfy-node').forEach(node => {
+          node.classList.toggle('edge-dimmed', node !== cardMap[current.from] && node !== cardMap[current.to]);
+        });
+      });
+      edgesGroup.appendChild(group);
+      edgeGroups.set(key, group);
+      return group;
+    }
+
+    let previousBoxes = new Map();
     function drawEdgesImmediate() {
-      edgesGroup.innerHTML = '';
-      const placedLabels = [];
+      let candidates = fullEdgeRedraw ? EDGES :
+        Array.from(new Set(Array.from(dirtyNodeIds).flatMap(id => edgesByNode.get(id) || [])));
+      const allBoxes = currentBoxes();
+      if (!fullEdgeRedraw && dirtyNodeIds.size) {
+        const affected = allBoxes.filter(box => dirtyNodeIds.has(box.card.dataset.id))
+          .flatMap(box => [box, previousBoxes.get(box.card.dataset.id)].filter(Boolean));
+        const keys = new Set(candidates.map(edgeKey));
+        edgeGroups.forEach((group, key) => {
+          const bounds = group.routeBounds;
+          if (bounds && affected.some(box => box.left <= bounds.right && box.right >= bounds.left &&
+              box.top <= bounds.bottom && box.bottom >= bounds.top)) keys.add(key);
+        });
+        candidates = EDGES.filter(edge => keys.has(edgeKey(edge)));
+      }
+      previousBoxes = new Map(allBoxes.map(box => [box.card.dataset.id, box]));
+      const changedKeys = new Set(candidates.map(edgeKey));
+      const obstacleIndex = (${createObstacleIndex.toString()})(allBoxes);
+      const placedLabels = allBoxes.map(box => ({ left:box.left - 4, right:box.right + 4, top:box.top - 4, bottom:box.bottom + 4 }));
+      edgeGroups.forEach((group, key) => {
+        if (!changedKeys.has(key) && group.labelBounds) placedLabels.push(group.labelBounds);
+      });
       const w = canvas.offsetWidth, h = canvas.offsetHeight;
-      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
-      svg.setAttribute('width', w);
-      svg.setAttribute('height', h);
-      EDGES.forEach(e => {
-        const a = cardMap[e.from], b = cardMap[e.to];
-        if (!a || !b || !a.isConnected || !b.isConnected) return;
-        const stableEdgeKey = edgeKey(e);
-        if (hiddenEdgeKeys.has(stableEdgeKey)) return;
-        // An edge into something hidden would point at empty space.
-        if (a.dataset.dfyHidden || b.dataset.dfyHidden) return;
-        
-        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        group.setAttribute('class', 'edge-group');
-        group.setAttribute('data-edge-key', stableEdgeKey);
-        group.setAttribute('data-from', e.from);
-        group.setAttribute('data-to', e.to);
-        
-        const d = routePath(a, b);
-
-        // Invisible wide hit-area path for easy clicking (14px wide)
-        const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        hitPath.setAttribute('d', d);
-        hitPath.setAttribute('class', 'edge-hit');
-        group.appendChild(hitPath);
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', d);
-        path.setAttribute('class', 'edge-path' + (e.dashed ? ' dashed' : ''));
-        path.setAttribute('marker-end', 'url(#dfy-arrow)');
-        group.appendChild(path);
-        // Add the path before measurement. Some browsers cannot measure a detached path.
-        edgesGroup.appendChild(group);
-        
-        if (e.label) {
-          // Sit the label on the line it belongs to, lifted just clear of it.
-          //
-          // The old placement used the midpoint between the two node centres,
-          // which an orthogonal route rarely passes through, and drew an opaque
-          // box that cut the line in half. This walks the real path, takes the
-          // longest straight run, and floats the text above it.
-          const anchor = separateLabel(labelAnchor(hitPath, d), e.label, placedLabels);
-          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      if (svg.getAttribute('width') !== String(w) || svg.getAttribute('height') !== String(h)) {
+        svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+        svg.setAttribute('width', w);
+        svg.setAttribute('height', h);
+      }
+      const knownKeys = new Set(EDGES.map(edgeKey));
+      edgeGroups.forEach((group, key) => {
+        if (!knownKeys.has(key)) { group.remove(); edgeGroups.delete(key); }
+      });
+      candidates.forEach(edge => {
+        const key = edgeKey(edge);
+        const a = cardMap[edge.from], b = cardMap[edge.to];
+        if (!a || !b || !a.isConnected || !b.isConnected ||
+            a.dataset.dfyHidden || b.dataset.dfyHidden || a.style.display === 'none' || b.style.display === 'none' || hiddenEdgeKeys.has(key)) {
+          edgeGroups.get(key)?.remove();
+          edgeGroups.delete(key);
+          return;
+        }
+        const group = edgeGroups.get(key) || createEdgeGroup(edge, key);
+        group.edge = edge;
+        const d = routePath(a, b, obstacleIndex);
+        if (group.route === d && group.label === edge.label && group.dashed === edge.dashed && group.bidirectional === edge.bidirectional) {
+          if (group.labelBounds) placedLabels.push(group.labelBounds);
+          return;
+        }
+        group.route = d;
+        const coordinates = d.match(/-?[0-9]+(?:\\.[0-9]+)?(?:e[+-]?[0-9]+)?/gi).map(Number);
+        const xs = coordinates.filter((_, i) => i % 2 === 0), ys = coordinates.filter((_, i) => i % 2 === 1);
+        group.routeBounds = { left:Math.min(...xs) - 8, right:Math.max(...xs) + 8,
+          top:Math.min(...ys) - 8, bottom:Math.max(...ys) + 8 };
+        group.label = edge.label;
+        group.dashed = edge.dashed;
+        group.bidirectional = edge.bidirectional;
+        if (edge.bidirectional) group.visiblePath.setAttribute('marker-start', 'url(#dfy-arrow)');
+        else group.visiblePath.removeAttribute('marker-start');
+        group.setAttribute('data-from', edge.from);
+        group.setAttribute('data-to', edge.to);
+        group.hitPath.setAttribute('d', d);
+        group.visiblePath.setAttribute('d', d);
+        group.visiblePath.setAttribute('class', 'edge-path' + (edge.dashed ? ' dashed' : ''));
+        if (edge.label) {
+          const anchor = separateLabel(labelAnchor(group.hitPath, d), edge.label, placedLabels);
+          const text = group.labelElement || document.createElementNS('http://www.w3.org/2000/svg', 'text');
           text.setAttribute('x', anchor.x);
           text.setAttribute('y', anchor.y);
           text.setAttribute('text-anchor', 'middle');
           text.setAttribute('dominant-baseline', 'middle');
-          const secondaryLabel = /^(uses|routes)$/i.test(e.label.trim());
+          const secondaryLabel = /^(uses|routes)$/i.test(edge.label.trim());
           text.setAttribute('class', 'edge-label-text' + (secondaryLabel ? ' edge-label-secondary' : ''));
-          text.textContent = e.label;
-          group.appendChild(text);
+          text.textContent = edge.label;
+          if (!group.labelElement) group.appendChild(text);
+          group.labelElement = text;
+          group.labelBounds = placedLabels[placedLabels.length - 1];
+        } else {
+          group.labelElement?.remove();
+          group.labelElement = null;
+          group.labelBounds = null;
         }
-        
-        group.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          document.querySelectorAll('.edge-group').forEach(g => g.classList.remove('active'));
-          group.classList.add('active');
-          svg.classList.add('has-active');
-          selectElement(group);
-          
-          // Highlight the two connected nodes, dim the rest. Its own class,
-          // separate from the search/legend "dimmed" state, so an edge
-          // selection and an active type filter don't fight over the same
-          // flag and silently cancel each other out.
-          const fromNode = cardMap[e.from];
-          const toNode = cardMap[e.to];
-          document.querySelectorAll('.dfy-node').forEach(n => {
-            if (n === fromNode || n === toNode) {
-              n.classList.remove('edge-dimmed');
-            } else {
-              n.classList.add('edge-dimmed');
-            }
-          });
-        });
-        
       });
+      dirtyNodeIds.clear();
+      fullEdgeRedraw = false;
     }
 
-    // drawEdges() fires on every pointermove while dragging a node, and each
-    // pass rebuilds the whole edge layer from scratch -- including, for a
-    // labeled edge, up to ~60 getTotalLength()/getPointAtLength() calls to
-    // place the label. Measured on a real 33-node/46-edge diagram, a single
-    // 40-step drag fired 41 full rebuilds totaling ~2.85s of layout work.
-    // Coalescing to one real rebuild per animation frame keeps the redraw
-    // continuous during a drag without redoing it 41 times when 1 would do.
+    // Batch changed connections before the next browser frame.
     let drawEdgesQueued = false;
     const afterDrawEdgesHooks = [];
     function onDrawEdgesComplete(fn) { afterDrawEdgesHooks.push(fn); }
-    function drawEdges() {
+    function drawEdges(changedIds) {
+      if (typeof changedIds === 'string') dirtyNodeIds.add(changedIds);
+      else if (Array.isArray(changedIds)) changedIds.forEach(id => dirtyNodeIds.add(id));
+      else fullEdgeRedraw = true;
       if (drawEdgesQueued) return;
       drawEdgesQueued = true;
       requestAnimationFrame(() => {
@@ -1049,7 +1176,8 @@ ${fontImport}
     // Deselect on an empty-canvas click. Wired once, here -- this used to be
     // re-added inside drawEdges() itself, so every redraw stacked another
     // duplicate listener onto canvas for the rest of the page's life.
-    canvas.addEventListener('click', () => {
+    canvas.addEventListener('click', event => {
+       if (event.target.closest('.dfy-node, .dfy-subgraph, .edge-group')) return;
        document.querySelectorAll('.edge-group').forEach(g => g.classList.remove('active'));
        svg.classList.remove('has-active');
        document.querySelectorAll('.dfy-node').forEach(n => n.classList.remove('edge-dimmed'));
@@ -1086,110 +1214,19 @@ ${fontImport}
       }, 100);
     }
     window.addEventListener('resize', drawEdges);
+    let cardObserver;
+    if (typeof ResizeObserver !== 'undefined') {
+      cardObserver = new ResizeObserver(entries => {
+        entries.forEach(entry => {
+          cardSizes.delete(entry.target);
+          drawEdges(entry.target.dataset.id);
+        });
+      });
+      document.querySelectorAll('.dfy-node').forEach(card => cardObserver.observe(card));
+    }
     
-    // Auto-calculate subgraph boundaries and assign nodes to subgraphs
-    const nodesData = Array.from(document.querySelectorAll('.dfy-node')).map(n => {
-      const cx = parseFloat(n.dataset.cx);
-      const cy = parseFloat(n.dataset.cy);
-      return { el: n, cx, cy, w: n.offsetWidth, h: n.offsetHeight };
-    });
-    
-    document.querySelectorAll('.dfy-subgraph').forEach(sg => {
-      const sx = parseFloat(sg.style.left);
-      const sy = parseFloat(sg.style.top);
-      const sw = parseFloat(sg.style.width);
-      const sh = parseFloat(sg.style.height);
-      
-      const contained = nodesData.filter(n => 
-        n.cx > sx && n.cx < sx + sw && n.cy > sy && n.cy < sy + sh
-      );
-      
-      sg.containedNodes = contained.map(n => n.el);
-      
-      // Expand subgraph to fit its nodes
-      if (contained.length > 0) {
-        const minX = Math.min(...contained.map(n => parseFloat(n.el.dataset.cx) - n.w / 2)) - 24;
-        const minY = Math.min(...contained.map(n => parseFloat(n.el.dataset.cy) - n.h / 2)) - 40;
-        const maxX = Math.max(...contained.map(n => parseFloat(n.el.dataset.cx) + n.w / 2)) + 24;
-        const maxY = Math.max(...contained.map(n => parseFloat(n.el.dataset.cy) + n.h / 2)) + 24;
-        
-        sg.style.left = minX + 'px';
-        sg.style.top = minY + 'px';
-        sg.style.width = (maxX - minX) + 'px';
-        sg.style.height = (maxY - minY) + 'px';
-      }
-    });
+    let editor;
 
-    // Drag logic
-    let dragging = null, lastPtr = null;
-
-    document.querySelectorAll('.dfy-node, .dfy-subgraph').forEach(el => {
-      el.addEventListener('pointerdown', e => {
-        if (e.target.isContentEditable || e.target.closest('.dfy-label, .dfy-subgraph-label')) return;
-        if (e.target.closest('button')) return;
-        // IMPORTANT: only start a subgraph drag if the pointer landed directly on the
-        // subgraph div itself or its label — NOT if it landed on a child node or the SVG
-        // edge layer (which sits on top of the subgraph div and would otherwise hijack clicks).
-        if (el.classList.contains('dfy-subgraph')) {
-          const directTarget = e.target;
-          const isOnSubgraph = directTarget === el || directTarget.closest('.dfy-subgraph-label');
-          if (!isOnSubgraph) return; // let the event pass through to nodes or edges
-        }
-        e.preventDefault();
-        dragging = el;
-        selectElement(el);
-        el.classList.add('dragging');
-        lastPtr = { x: e.clientX, y: e.clientY };
-        el.setPointerCapture(e.pointerId);
-        if (pz) pz.setOptions({ disablePan: true });
-      });
-      el.addEventListener('pointermove', e => {
-        if (dragging !== el) return;
-        const scale = pz ? pz.getScale() : 1;
-        const dx = (e.clientX - lastPtr.x) / scale;
-        const dy = (e.clientY - lastPtr.y) / scale;
-        lastPtr = { x: e.clientX, y: e.clientY };
-        
-        if (el.classList.contains('dfy-node')) {
-          const newCx = parseFloat(el.dataset.cx) + dx;
-          const newCy = parseFloat(el.dataset.cy) + dy;
-          el.dataset.cx = newCx;
-          el.dataset.cy = newCy;
-          el.style.left = newCx + 'px';
-          el.style.top = newCy + 'px';
-        } else if (el.classList.contains('dfy-subgraph')) {
-          const sx = parseFloat(el.style.left) + dx;
-          const sy = parseFloat(el.style.top) + dy;
-          el.style.left = sx + 'px';
-          el.style.top = sy + 'px';
-          
-          if (el.containedNodes) {
-            el.containedNodes.forEach(n => {
-              if (!n.isConnected) return;
-              const newCx = parseFloat(n.dataset.cx) + dx;
-              const newCy = parseFloat(n.dataset.cy) + dy;
-              n.dataset.cx = newCx;
-              n.dataset.cy = newCy;
-              n.style.left = newCx + 'px';
-              n.style.top = newCy + 'px';
-            });
-          }
-        }
-        drawEdges();
-      });
-      el.addEventListener('pointerup', e => {
-        if (dragging === el) { 
-          el.classList.remove('dragging'); 
-          el.releasePointerCapture(e.pointerId); 
-          dragging = null; 
-          if (pz) pz.setOptions({ disablePan: false });
-          // Apply snap-to-grid on drag end for all nodes (not just pasted clones)
-          if (el.classList.contains('dfy-node')) applySnap(el);
-          drawEdges();
-        }
-      });
-    });
-    
     let selectedEl = null;
     function selectElement(el) {
       document.querySelectorAll('.dfy-node, .dfy-subgraph, .edge-group').forEach(n => n.classList.remove('selected'));
@@ -1199,122 +1236,8 @@ ${fontImport}
       if (hideButton) hideButton.disabled = !el;
     }
 
-    // ─── Undo / Redo ─────────────────────────────────────────────────────────
-    const undoStack = [];
-    const redoStack = [];
-    const UNDO_MAX = 50;
-
-    // Snapshot captures full DOM state: positions AND presence of every node
-    function captureSnapshot() {
-      const state = [];
-      canvas.querySelectorAll('.dfy-node').forEach(n => {
-        state.push({
-          id: n.dataset.nodeId || n.dataset.id || '',
-          cx: parseFloat(n.dataset.cx),
-          cy: parseFloat(n.dataset.cy),
-          outerHTML: n.outerHTML,
-        });
-      });
-      return state;
-    }
-
-    function pushUndo() {
-      undoStack.push(captureSnapshot());
-      if (undoStack.length > UNDO_MAX) undoStack.shift();
-      redoStack.length = 0;
-    }
-
-    function applySnapshot(state) {
-      // Remove nodes that weren't in the snapshot
-      const snapshotIds = new Set(state.map(e => e.id));
-      canvas.querySelectorAll('.dfy-node').forEach(n => {
-        const id = n.dataset.nodeId || n.dataset.id || '';
-        if (!snapshotIds.has(id)) n.remove();
-      });
-      // Update existing / restore removed nodes
-      state.forEach(entry => {
-        let node = canvas.querySelector(\`.dfy-node[data-node-id="\${entry.id}"], .dfy-node[data-id="\${entry.id}"]\`);
-        if (!node) {
-          // Node was deleted — restore it from saved HTML
-          const tmp = document.createElement('div');
-          tmp.innerHTML = entry.outerHTML;
-          node = tmp.firstElementChild;
-          canvas.appendChild(node);
-          // Re-attach drag listeners for restored nodes
-          attachDragListeners(node);
-        }
-        node.dataset.cx = entry.cx;
-        node.dataset.cy = entry.cy;
-        node.style.left = entry.cx + 'px';
-        node.style.top = entry.cy + 'px';
-      });
-      drawEdges();
-    }
-
-    // Helper: attach all drag + undo listeners to a node element (used for initial nodes and restored nodes)
-    function attachDragListeners(el) {
-      el.addEventListener('pointerdown', () => pushUndo(), { capture: true });
-      el.addEventListener('pointerdown', e => {
-        if (e.target.isContentEditable || e.target.closest('.dfy-label, .dfy-subgraph-label')) return;
-        if (e.target.closest('button')) return;
-        e.preventDefault(); dragging = el; selectElement(el);
-        el.classList.add('dragging'); lastPtr = { x: e.clientX, y: e.clientY };
-        el.setPointerCapture(e.pointerId); if (pz) pz.setOptions({ disablePan: true });
-      });
-      el.addEventListener('pointermove', e => {
-        if (dragging !== el) return;
-        const scale = pz ? pz.getScale() : 1;
-        const dx = (e.clientX - lastPtr.x) / scale, dy = (e.clientY - lastPtr.y) / scale;
-        lastPtr = { x: e.clientX, y: e.clientY };
-        const newCx = parseFloat(el.dataset.cx) + dx;
-        const newCy = parseFloat(el.dataset.cy) + dy;
-        el.dataset.cx = newCx; el.dataset.cy = newCy;
-        el.style.left = newCx + 'px'; el.style.top = newCy + 'px';
-        drawEdges();
-      });
-      el.addEventListener('pointerup', e => {
-        if (dragging === el) {
-          el.classList.remove('dragging'); el.releasePointerCapture(e.pointerId); dragging = null;
-          if (pz) pz.setOptions({ disablePan: false });
-          applySnap(el); drawEdges();
-        }
-      });
-    }
-
-    // Capture before each drag
-    document.querySelectorAll('.dfy-node, .dfy-subgraph').forEach(el => {
-      el.addEventListener('pointerdown', () => pushUndo(), { capture: true });
-    });
-
-    // ─── Snap to grid ─────────────────────────────────────────────────────────
     let snapEnabled = false;
-    const GRID_SIZE = 20;
-    function snapToGrid(v) { return Math.round(v / GRID_SIZE) * GRID_SIZE; }
-    function applySnap(el) {
-      if (!snapEnabled || !el.classList.contains('dfy-node')) return;
-      const cx = snapToGrid(parseFloat(el.dataset.cx));
-      const cy = snapToGrid(parseFloat(el.dataset.cy));
-      el.dataset.cx = cx; el.dataset.cy = cy;
-      el.style.left = cx + 'px'; el.style.top = cy + 'px';
-    }
-
-    // ─── Copy / Paste ─────────────────────────────────────────────────────────
-    let clipboard = null;
-
-    // ─── Auto-layout reset ────────────────────────────────────────────────────
-    const defaultPositions = [];
-    document.querySelectorAll('.dfy-node').forEach(n => {
-      defaultPositions.push({ el: n, cx: parseFloat(n.dataset.cx), cy: parseFloat(n.dataset.cy) });
-    });
-    function resetLayout() {
-      pushUndo();
-      defaultPositions.forEach(({ el, cx, cy }) => {
-        if (!el.isConnected) return;
-        el.dataset.cx = cx; el.dataset.cy = cy;
-        el.style.left = cx + 'px'; el.style.top = cy + 'px';
-      });
-      drawEdges();
-    }
+    function resetLayout() { editor?.resetLayout(); }
 
     // ─── Edit mode — declare BEFORE the keydown that references editMode ──────
     const editBtn = document.getElementById('edit-btn');
@@ -1387,17 +1310,11 @@ ${fontImport}
 
     function hideElement(el) {
       if (!el || hidden.has(hiddenKey(el))) return;
-      pushUndo();
 
       if (el.classList.contains('dfy-subgraph')) {
         // Hiding a tier hides what it holds, or the members float free.
-        const box = el.getBoundingClientRect();
-        document.querySelectorAll('.dfy-node').forEach(card => {
-          const r = card.getBoundingClientRect();
-          if (r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom) {
-            hideOne(card);
-          }
-        });
+        const group = IR_GRAPH?.groups.find(group => group.id === el.dataset.id);
+        (group?.nodeIds || []).forEach(id => { if (cardMap[id]) hideOne(cardMap[id]); });
       }
 
       hideOne(el);
@@ -1422,7 +1339,7 @@ ${fontImport}
       if (entry.edgeKey) {
         hiddenEdgeKeys.delete(entry.edgeKey);
       } else if (entry.el) {
-        entry.el.style.display = '';
+        entry.el.style.display = entry.el.dataset.layerHidden ? 'none' : '';
         delete entry.el.dataset.dfyHidden;
       }
       hidden.delete(entry.key);
@@ -1435,7 +1352,7 @@ ${fontImport}
         if (entry.edgeKey) {
           hiddenEdgeKeys.delete(entry.edgeKey);
         } else if (entry.el) {
-          entry.el.style.display = '';
+          entry.el.style.display = entry.el.dataset.layerHidden ? 'none' : '';
           delete entry.el.dataset.dfyHidden;
         }
       }
@@ -1454,17 +1371,6 @@ ${fontImport}
       const tag = document.activeElement?.tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
 
-      // Delete selected element
-      if ((e.key === 'Backspace' || e.key === 'Delete') && selectedEl && !editMode && !typing) {
-        if (selectedEl.classList.contains('dfy-node') || selectedEl.classList.contains('dfy-subgraph') || selectedEl.classList.contains('edge-group')) {
-          pushUndo();
-          selectedEl.remove();
-          selectedEl = null;
-          drawEdges();
-        }
-        return;
-      }
-
       // Hide the selection. Unlike delete, this is reversible from the panel,
       // so a reader can strip a diagram back to the part being discussed.
       if (e.key === 'h' && selectedEl && !editMode && !typing) {
@@ -1478,81 +1384,6 @@ ${fontImport}
       }
 
       if (typing) return;
-
-      // Undo: Ctrl+Z
-      if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        e.preventDefault();
-        if (undoStack.length > 0) {
-          redoStack.push(captureSnapshot());
-          applySnapshot(undoStack.pop());
-        }
-        return;
-      }
-
-      // Redo: Ctrl+Shift+Z or Ctrl+Y
-      if ((e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) || (e.key === 'y' && (e.ctrlKey || e.metaKey))) {
-        e.preventDefault();
-        if (redoStack.length > 0) {
-          undoStack.push(captureSnapshot());
-          applySnapshot(redoStack.pop());
-        }
-        return;
-      }
-
-      // Copy: Ctrl+C — copies selected node position + label
-      if (e.key === 'c' && (e.ctrlKey || e.metaKey) && selectedEl?.classList.contains('dfy-node')) {
-        e.preventDefault();
-        clipboard = {
-          cx: parseFloat(selectedEl.dataset.cx),
-          cy: parseFloat(selectedEl.dataset.cy),
-          html: selectedEl.outerHTML,
-        };
-        return;
-      }
-
-      // Paste: Ctrl+V — clones the copied node with an offset
-      if (e.key === 'v' && (e.ctrlKey || e.metaKey) && clipboard) {
-        e.preventDefault();
-        pushUndo();
-        const tmp = document.createElement('div');
-        tmp.innerHTML = clipboard.html;
-        const clone = tmp.firstElementChild;
-        if (clone) {
-          const newCx = clipboard.cx + 30;
-          const newCy = clipboard.cy + 30;
-          clone.dataset.cx = newCx;
-          clone.dataset.cy = newCy;
-          clone.style.left = newCx + 'px';
-          clone.style.top = newCy + 'px';
-          clone.removeAttribute('id');
-          clone.dataset.nodeId = 'copy_' + Date.now();
-          canvas.appendChild(clone);
-          selectElement(clone);
-          // Re-attach drag listeners
-          clone.addEventListener('pointerdown', e2 => {
-            if (e2.target.isContentEditable || e2.target.closest('.dfy-label, .dfy-subgraph-label')) return;
-            if (e2.target.closest('button')) return;
-            e2.preventDefault(); dragging = clone; selectElement(clone);
-            clone.classList.add('dragging'); lastPtr = { x: e2.clientX, y: e2.clientY };
-            clone.setPointerCapture(e2.pointerId); if (pz) pz.setOptions({ disablePan: true });
-          });
-          clone.addEventListener('pointermove', e2 => {
-            if (dragging !== clone) return;
-            const scale = pz ? pz.getScale() : 1;
-            const dx = (e2.clientX - lastPtr.x) / scale, dy = (e2.clientY - lastPtr.y) / scale;
-            lastPtr = { x: e2.clientX, y: e2.clientY };
-            const nx = parseFloat(clone.dataset.cx) + dx, ny = parseFloat(clone.dataset.cy) + dy;
-            clone.dataset.cx = nx; clone.dataset.cy = ny;
-            clone.style.left = nx + 'px'; clone.style.top = ny + 'px';
-            drawEdges();
-          });
-          clone.addEventListener('pointerup', e2 => {
-            if (dragging === clone) { clone.classList.remove('dragging'); clone.releasePointerCapture(e2.pointerId); dragging = null; if (pz) pz.setOptions({ disablePan: false }); applySnap(clone); drawEdges(); }
-          });
-          drawEdges();
-        }
-        return;
-      }
 
       // Snap-to-grid toggle: G
       if (e.key === 'g' || e.key === 'G') {
@@ -1570,24 +1401,6 @@ ${fontImport}
       }
     });
 
-    function bindEditable(sel) {
-      document.querySelectorAll(sel).forEach(el => {
-        el.addEventListener('click', e => {
-          if (!editMode) return;
-          e.stopPropagation();
-          el.contentEditable = 'true';
-          el.focus();
-          document.execCommand('selectAll', false, null);
-        });
-        el.addEventListener('blur', () => { el.contentEditable = 'false'; });
-        el.addEventListener('keydown', e => {
-          if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
-          if (e.key === 'Escape') { el.blur(); }
-        });
-      });
-    }
-    bindEditable('.dfy-label');
-    bindEditable('.dfy-subgraph-label');
     // Theme
     const themes = ${JSON.stringify(THEMES_AVAILABLE)};
     let themeIdx = themes.indexOf('${initialTheme}');
@@ -1677,11 +1490,47 @@ ${fontImport}
     const activeLegendTypes = new Set();
     let searchQuery = '';
     const TYPE_LABELS = {};
-    document.querySelectorAll('.legend-item[data-type]').forEach(item => {
+    const typeLegendEl = document.getElementById('type-legend');
+    // Wires a legend row's click-to-filter behavior and records its label
+    // for type-name search matching. Used for both the rows rendered at
+    // load and any ensureLegendRow() adds later, so every row -- however it
+    // got there -- behaves the same way.
+    function wireLegendItem(item) {
       const t = item.getAttribute('data-type');
       const labelSpan = item.querySelector('.legend-label');
       if (t && labelSpan) TYPE_LABELS[t] = labelSpan.textContent;
-    });
+      item.style.cursor = 'pointer';
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      item.setAttribute('aria-pressed', 'false');
+      item.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); item.click(); }
+      });
+      item.addEventListener('click', () => {
+        if (activeLegendTypes.has(t)) activeLegendTypes.delete(t);
+        else activeLegendTypes.add(t);
+        updateNodeEmphasis();
+      });
+    }
+    document.querySelectorAll('.legend-item[data-type]').forEach(wireLegendItem);
+    // The sidebar only renders rows for the service types present when the
+    // page first loads, so a small diagram isn't buried under all 16
+    // possible categories. When live editing introduces a node of a type
+    // that wasn't there at load, this adds a row for it rather than leaving
+    // that type unfilterable and missing from the legend.
+    function ensureLegendRow(type) {
+      if (!type || !typeLegendEl || typeLegendEl.querySelector('.legend-item[data-type="' + type + '"]')) return;
+      const meta = LEGEND_META.find(item => item.type === type);
+      if (!meta) return;
+      const row = document.createElement('div');
+      row.className = 'legend-item';
+      row.setAttribute('data-type', meta.type);
+      row.innerHTML = '<span class="legend-swatch" style="background:' + meta.swatch + '"></span>' +
+        '<span class="legend-label">' + escHtml(meta.label) + '</span>' +
+        '<span class="legend-detail">' + escHtml(meta.detail) + '</span>';
+      typeLegendEl.appendChild(row);
+      wireLegendItem(row);
+    }
 
     function escHtml(s) {
       return String(s).replace(/[&<>"']/g, c =>
@@ -1755,35 +1604,14 @@ ${fontImport}
       document.querySelectorAll('.legend-item[data-type]').forEach(item => {
         const active = activeLegendTypes.has(item.getAttribute('data-type'));
         item.classList.toggle('legend-item-active', active);
-        item.style.opacity = (!hasTypeFilter || active) ? '1' : '0.5';
+        item.style.opacity = '1';
+        item.setAttribute('aria-pressed', String(active));
       });
     }
 
-    // Legend: click toggles that type in/out of the active filter set, so
-    // several types can be highlighted together instead of just one at a
-    // time.
-    document.querySelectorAll('.legend-item[data-type]').forEach(item => {
-      item.style.cursor = 'pointer';
-      item.addEventListener('click', () => {
-        const type = item.getAttribute('data-type');
-        if (activeLegendTypes.has(type)) activeLegendTypes.delete(type);
-        else activeLegendTypes.add(type);
-        updateNodeEmphasis();
-      });
-    });
     // Reset
     document.getElementById('reset-btn').addEventListener('click', () => {
-      document.querySelectorAll('.dfy-node').forEach(card => {
-        const nodeData = NODES.find(n => n.id === card.dataset.id);
-        if (nodeData) {
-          const origCx = nodeData.x + nodeData.w / 2;
-          const origCy = nodeData.y + nodeData.h / 2;
-          card.dataset.cx = origCx;
-          card.dataset.cy = origCy;
-          card.style.left = origCx + 'px';
-          card.style.top  = origCy + 'px';
-        }
-      });
+      editor?.resetLayout();
       if (pz) { pz.reset(); pz.pan(0, 0); }
       themeIdx = 0; setTheme(themes[0]); setEdit(false); drawEdges();
     });
@@ -1883,6 +1711,10 @@ ${fontImport}
             clone.removeAttribute('class');
             const stroke = getComputedStyle(el).stroke;
             if (stroke && stroke !== 'none') clone.setAttribute('stroke', stroke);
+            const style = getComputedStyle(el);
+            for (const property of ['stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin']) {
+              clone.setAttribute(property, style.getPropertyValue(property));
+            }
             clone.setAttribute('fill', 'none');
             parts.push(clone.outerHTML);
           });
@@ -1890,13 +1722,25 @@ ${fontImport}
           const clone = el.cloneNode(true);
           clone.setAttribute('fill', getComputedStyle(el).fill || textColor);
           clone.setAttribute('opacity', getComputedStyle(el).opacity || '1');
+          const style = getComputedStyle(el);
+          for (const property of ['font-family', 'font-size', 'font-weight', 'letter-spacing']) {
+            clone.setAttribute(property, style.getPropertyValue(property));
+          }
           clone.setAttribute('stroke', bg);
           clone.setAttribute('stroke-width', '3');
           clone.setAttribute('paint-order', 'stroke fill');
           parts.push(clone.outerHTML);
         });
         const markers = liveEdges.querySelector('defs');
-        if (markers) parts.push(markers.outerHTML);
+        if (markers) {
+          const clone = markers.cloneNode(true);
+          const shapes = markers.querySelectorAll('path, polygon, polyline');
+          clone.querySelectorAll('path, polygon, polyline').forEach((path, i) => {
+            const style = getComputedStyle(shapes[i]);
+            path.setAttribute('fill', style.fill); path.setAttribute('stroke', style.stroke);
+          });
+          parts.push(clone.outerHTML);
+        }
       }
 
       // Cards as a rectangle plus centred label text.
@@ -2027,48 +1871,14 @@ ${fontImport}
       });
       graph.nodes.forEach(function (node) { if (!grouped[node.id]) lines.push('    ' + renderNodeForMermaid(node)); });
       graph.edges.forEach(function (edge) {
-        var connector = edge.kind === 'async' ? '-.->' : '-->';
+        var connector = edge.bidirectional ? (edge.kind === 'async' ? '<-.->' : '<-->') : edge.kind === 'async' ? '-.->' : '-->';
         var label = edge.label ? ('|' + escapeLabelForMermaid(edge.label) + '|') : '';
         lines.push('    ' + edge.from + ' ' + connector + label + ' ' + edge.to);
       });
       return lines.join(MERMAID_NL);
     }
-    // Reads the live canvas back onto a copy of the graph the diagram was
-    // built from: renamed labels and dragged positions. Hidden nodes stay in
-    // (Hide is a reversible view filter, not a deletion); adding or removing
-    // nodes and edges is not persisted by this export.
     function buildEditedGraph() {
-      if (!IR_GRAPH) return null;
-      var graph = JSON.parse(JSON.stringify(IR_GRAPH));
-      var nodeById = {};
-      graph.nodes.forEach(function (n) { nodeById[n.id] = n; });
-      document.querySelectorAll('.dfy-node').forEach(function (el) {
-        var id = el.dataset.nodeId || el.dataset.id;
-        var node = nodeById[id];
-        if (!node) return;
-        var labelEl = el.querySelector('.dfy-label');
-        if (labelEl) {
-          var text = labelEl.textContent.trim();
-          if (text) node.label = text;
-        }
-        var cx = parseFloat(el.dataset.cx), cy = parseFloat(el.dataset.cy);
-        if (!Number.isNaN(cx) && !Number.isNaN(cy)) {
-          var w = (node.layout && node.layout.width) || el.offsetWidth || 0;
-          var h = (node.layout && node.layout.height) || el.offsetHeight || 0;
-          node.layout = { x: cx - w / 2, y: cy - h / 2, width: w, height: h };
-        }
-      });
-      document.querySelectorAll('.dfy-subgraph').forEach(function (el) {
-        var id = el.dataset.id;
-        var group = graph.groups.find(function (g) { return g.id === id; });
-        if (!group) return;
-        var labelEl = el.querySelector('.dfy-subgraph-label');
-        if (labelEl) {
-          var text = labelEl.textContent.trim();
-          if (text) group.label = text;
-        }
-      });
-      return graph;
+      return editor ? editor.read().graph : IR_GRAPH;
     }
     function exportEditedMermaid() {
       var graph = buildEditedGraph();
@@ -2139,7 +1949,16 @@ ${fontImport}
 
     // Layer Panel
     const layerList = document.getElementById('layer-list');
-    if (layerList) {
+    function refreshLayers() {
+      if (!layerList) return;
+      const checked = new Map(Array.from(layerList.querySelectorAll('input')).map(input => [input.dataset.sg, input.checked]));
+      layerList.replaceChildren();
+      document.querySelectorAll('[data-subgraph]').forEach(element => {
+        const hidden = checked.get(element.dataset.subgraph) === false;
+        if (hidden) element.style.display = 'none';
+        else if (element.dataset.layerHidden && !element.dataset.dfyHidden) element.style.display = '';
+        element.dataset.layerHidden = hidden ? 'true' : '';
+      });
       const subgraphsMap = new Map();
       document.querySelectorAll('.dfy-subgraph').forEach(sg => {
         const id = sg.getAttribute('data-id');
@@ -2157,7 +1976,7 @@ ${fontImport}
         labelEl.style.cursor = 'pointer';
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.checked = true;
+        checkbox.checked = checked.get(sgId) !== false;
         checkbox.dataset.sg = sgId;
         checkbox.style.margin = '0';
         checkbox.style.cursor = 'pointer';
@@ -2165,7 +1984,10 @@ ${fontImport}
         checkbox.addEventListener('change', e => {
           const show = e.target.checked;
           document.querySelectorAll('[data-subgraph]').forEach(el => {
-            if (el.getAttribute('data-subgraph') === sgId) el.style.display = show ? '' : 'none';
+            if (el.getAttribute('data-subgraph') === sgId) {
+              el.dataset.layerHidden = show ? '' : 'true';
+              el.style.display = show && !el.dataset.dfyHidden ? '' : 'none';
+            }
           });
           drawEdges();
         });
@@ -2173,10 +1995,13 @@ ${fontImport}
       });
     }
 
+    refreshLayers();
+
     // Detail Panel
     const detailPanel = document.getElementById('dfy-detail');
     const detailContent = document.getElementById('dfy-detail-content');
     const detailClose = document.getElementById('dfy-detail-close');
+    let refreshDetail = () => {};
     if (detailPanel && detailClose) {
       detailClose.addEventListener('click', () => {
         detailPanel.classList.remove('visible');
@@ -2186,9 +2011,7 @@ ${fontImport}
           detailPanel.classList.remove('visible');
         }
       });
-      document.querySelectorAll('.dfy-node').forEach(node => {
-        node.addEventListener('click', (e) => {
-          e.stopPropagation();
+      function showNodeDetail(node) {
           const nodeId = node.dataset.id;
           const nodeLabel = node.dataset.label;
           const nodeType = node.dataset.type;
@@ -2202,6 +2025,37 @@ ${fontImport}
           badge.className = 'badge';
           badge.textContent = nodeType || 'Service';
           detailContent.append(heading, badge);
+          const claim = IR_GRAPH?.nodes.find(item => item.id === nodeId);
+          const statusLabels = { observed: 'Found in source', inferred: 'Inferred. Check this claim.', proposed: 'Proposed design' };
+          const status = document.createElement('p');
+          status.textContent = statusLabels[claim?.status] || 'Evidence status is unknown.';
+          detailContent.appendChild(status);
+          if (claim?.description) {
+            const description = document.createElement('p');
+            description.textContent = claim.description;
+            detailContent.appendChild(description);
+          }
+          const sources = document.createElement('ul');
+          sources.setAttribute('aria-label', 'Source evidence');
+          (claim?.evidence || []).forEach(evidence => {
+            const item = document.createElement('li');
+            item.textContent = evidence.source + (evidence.hint ? ': ' + evidence.hint : '');
+            sources.appendChild(item);
+          });
+          if (sources.childElementCount) detailContent.appendChild(sources);
+          if (!connectedEdges.length) {
+            const unknown = document.createElement('p');
+            unknown.textContent = 'No known connections.';
+            detailContent.appendChild(unknown);
+          }
+          connectedEdges.forEach(edge => {
+            const item = document.createElement('p');
+            const peer = edge.from === nodeId ? edge.to : edge.from;
+            item.textContent = (edge.from === nodeId ? 'To ' : 'From ') +
+              (cardMap[peer]?.dataset.label || peer) + ': ' + (edge.label || 'Connection') +
+              '. ' + (statusLabels[edge.status] || 'Evidence status is unknown.');
+            detailContent.appendChild(item);
+          });
           if (incoming.length) {
             const incomingEl = document.createElement('div');
             incomingEl.style.marginTop = '12px';
@@ -2215,7 +2069,16 @@ ${fontImport}
             detailContent.appendChild(outgoingEl);
           }
           detailPanel.classList.add('visible');
-        });
+      }
+      refreshDetail = () => {
+        if (!detailPanel.classList.contains('visible')) return;
+        if (selectedEl?.classList.contains('dfy-node')) showNodeDetail(selectedEl);
+        else detailPanel.classList.remove('visible');
+      };
+      canvas.addEventListener('click', e => {
+        const node = e.target.closest('.dfy-node');
+        if (!node || editMode) return;
+        selectElement(node); e.stopPropagation(); showNodeDetail(node);
       });
       document.addEventListener('click', (e) => {
         if (!e.target.closest('.dfy-detail-panel') && !e.target.closest('.dfy-node')) {
@@ -2230,6 +2093,7 @@ ${fontImport}
     const minimapViewport = document.getElementById('dfy-minimap-viewport');
     if (minimapCanvas && minimapViewport) {
       const ctx = minimapCanvas.getContext('2d');
+      let minimapBounds = null;
       function renderMinimap() {
         const mw = minimapCanvas.width, mh = minimapCanvas.height;
         // Resolve theme colors from computed style (avoids CSS variable resolution failure in canvas)
@@ -2247,25 +2111,34 @@ ${fontImport}
         // single 40-step drag on a 46-edge diagram.
         const liveNodesById = new Map();
         canvas.querySelectorAll('.dfy-node').forEach(card => {
-          const cx = parseFloat(card.dataset.cx);
+          if (card.dataset.dfyHidden || card.style.display === 'none') return;
+          const position = center(card);
+          const cx = position.x;
           if (isNaN(cx)) return;
           liveNodesById.set(card.dataset.id, {
-            cx, cy: parseFloat(card.dataset.cy),
-            w: card.offsetWidth, h: card.offsetHeight,
+            cx, cy: position.y,
+            w: position.w, h: position.h,
           });
         });
         const liveNodes = Array.from(liveNodesById.values());
-        if (!liveNodes.length) return;
+        if (!liveNodes.length) {
+          minimapBounds = null;
+          minimapViewport.style.display = 'none';
+          return;
+        }
+        minimapViewport.style.display = '';
         const minX = Math.min(...liveNodes.map(n => n.cx - n.w / 2));
         const maxX = Math.max(...liveNodes.map(n => n.cx + n.w / 2));
         const minY = Math.min(...liveNodes.map(n => n.cy - n.h / 2));
         const maxY = Math.max(...liveNodes.map(n => n.cy + n.h / 2));
         const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
         const scaleX = (mw - 8) / rangeX, scaleY = (mh - 8) / rangeY;
+        minimapBounds = { minX, minY, scaleX, scaleY, mw, mh };
         // Draw edges as thin lines
         ctx.strokeStyle = edgeColor;
         ctx.lineWidth = 0.5;
         EDGES.forEach(e => {
+          if (hiddenEdgeKeys.has(edgeKey(e))) return;
           const a = liveNodesById.get(e.from);
           const b = liveNodesById.get(e.to);
           if (!a || !b) return;
@@ -2283,7 +2156,11 @@ ${fontImport}
           ctx.fillStyle = accentColor;
           ctx.fillRect(nx - nw / 2, ny - nh / 2, nw, nh);
         });
-        // Draw viewport indicator
+        updateMinimapViewport();
+      }
+      function updateMinimapViewport() {
+        if (!minimapBounds) return;
+        const { minX, minY, scaleX, scaleY, mw, mh } = minimapBounds;
         const pzPan = pz ? pz.getPan() : { x: 0, y: 0 };
         const pzScale = pz ? pz.getScale() : 1;
         const vpW = canvasWrap.clientWidth, vpH = canvasWrap.clientHeight;
@@ -2297,32 +2174,23 @@ ${fontImport}
         const vh = Math.max(4, vpCanvasH * scaleY);
         minimapViewport.style.left = Math.max(0, vx) + 'px';
         minimapViewport.style.top = Math.max(0, vy) + 'px';
-        minimapViewport.style.width = Math.min(mw - Math.max(0, vx), vw) + 'px';
-        minimapViewport.style.height = Math.min(mh - Math.max(0, vy), vh) + 'px';
+        minimapViewport.style.width = Math.max(0, Math.min(mw - Math.max(0, vx), vw)) + 'px';
+        minimapViewport.style.height = Math.max(0, Math.min(mh - Math.max(0, vy), vh)) + 'px';
       }
       // Re-render minimap whenever edges are redrawn (drag, resize, etc.) --
       // hooked into the coalesced redraw so this also fires at most once per
       // animation frame, not once per raw drawEdges() call.
       onDrawEdgesComplete(renderMinimap);
       // Also on panzoom events
-      canvas.addEventListener('panzoomchange', renderMinimap);
+      canvas.addEventListener('panzoomchange', updateMinimapViewport);
       requestAnimationFrame(() => requestAnimationFrame(renderMinimap));
       minimapCanvas.addEventListener('click', (e) => {
         const rect = minimapCanvas.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-        // Convert minimap click to canvas space, then pan panzoom there
-        const liveNds = Array.from(canvas.querySelectorAll('.dfy-node')).map(c => ({
-          cx: parseFloat(c.dataset.cx), cy: parseFloat(c.dataset.cy),
-          w: c.offsetWidth, h: c.offsetHeight,
-        })).filter(n => !isNaN(n.cx));
-        if (!liveNds.length || !pz) return;
-        const mnX = Math.min(...liveNds.map(n => n.cx - n.w/2));
-        const mxX = Math.max(...liveNds.map(n => n.cx + n.w/2));
-        const mnY = Math.min(...liveNds.map(n => n.cy - n.h/2));
-        const mxY = Math.max(...liveNds.map(n => n.cy + n.h/2));
-        const rX = mxX - mnX || 1, rY = mxY - mnY || 1;
-        const targetCx = mnX + (mx / minimapCanvas.width) * rX;
-        const targetCy = mnY + (my / minimapCanvas.height) * rY;
+        if (!minimapBounds || !pz) return;
+        const { minX, minY, scaleX, scaleY } = minimapBounds;
+        const targetCx = minX + (mx - 4) / scaleX;
+        const targetCy = minY + (my - 4) / scaleY;
         const scale = pz.getScale();
         pz.pan(
           canvasWrap.clientWidth / 2 - targetCx * scale,
@@ -2361,6 +2229,67 @@ ${fontImport}
       else if (k === 'l') document.getElementById('legend-btn').click();
       else if (k === 'r') document.getElementById('reset-btn').click();
     });
+
+    if (IR_GRAPH) {
+      editor = DiagramifySession.installEditor({
+        canvas, cards: cardMap, initial: IR_GRAPH,
+        getScale: () => pz.getScale(),
+        disablePan: value => pz.setOptions({ disablePan: value }),
+        selected: () => selectedEl,
+        select: selectElement,
+        editing: () => editMode,
+        snap: () => snapEnabled,
+        draw: ids => drawEdges(ids),
+        changed: snapshot => {
+          IR_GRAPH = snapshot.graph;
+          EDGES = snapshot.graph.edges.map(edge => ({ ...edge, dashed: edge.kind === 'async' }));
+          edgesByNode.clear();
+          EDGES.forEach(edge => [edge.from, edge.to].forEach(id => {
+            if (!edgesByNode.has(id)) edgesByNode.set(id, []);
+            edgesByNode.get(id).push(edge);
+          }));
+          cardObserver?.disconnect();
+          Object.values(cardMap).forEach(card => { cardSizes.delete(card); cardObserver?.observe(card); });
+          const present = new Set(Object.values(cardMap).map(card => card.dataset.type));
+          present.forEach(ensureLegendRow);
+          document.querySelectorAll('#type-legend [data-type]').forEach(row => { row.style.display = present.has(row.dataset.type) ? '' : 'none'; });
+          for (const entry of hidden.values()) {
+            if (entry.edgeKey) continue;
+            const id = entry.key.slice(entry.key.indexOf(':') + 1);
+            const element = entry.key.startsWith('node:') ? cardMap[id] :
+              canvas.querySelector('.dfy-subgraph[data-id="' + id + '"]');
+            if (!element) continue;
+            entry.el = element; entry.name = nameOf(element);
+            element.dataset.dfyHidden = '1'; element.style.display = 'none';
+            if (entry.key.startsWith('group:')) {
+              const group = IR_GRAPH.groups.find(group => group.id === id);
+              (group?.nodeIds || []).forEach(nodeId => { if (cardMap[nodeId]) hideOne(cardMap[nodeId]); });
+            }
+          }
+          if (hidden.size) renderHiddenPanel();
+          refreshLayers();
+          updateNodeEmphasis();
+          refreshDetail();
+          canvas.dispatchEvent(new CustomEvent('diagramify:change', { detail: snapshot }));
+        },
+      });
+      window.diagramify = editor;
+      window.addEventListener('diagramify:options', event => {
+        const options = event.detail || {};
+        if (options.theme && themes.includes(options.theme)) {
+          themeIdx = themes.indexOf(options.theme); setTheme(options.theme);
+        }
+        [['showMinimap', '#dfy-minimap'], ['showSearch', '.dfy-search-wrap'],
+          ['showLayerPanel', '#layer-panel'], ['showNodeDetail', '#dfy-detail']].forEach(([key, selector]) => {
+          if (key in options) { const element = document.querySelector(selector); if (element) element.style.display = options[key] === false ? 'none' : ''; }
+        });
+        if (typeof options.title === 'string') {
+          document.title = options.title;
+          document.querySelector('.header h1').textContent = options.title;
+        }
+      });
+      window.dispatchEvent(new Event('diagramify:ready'));
+    }
   </script>
 
 </body>

@@ -21,6 +21,9 @@ HANDOFF*.md
 implementation_plan.md
 walkthrough.md
 task.md
+docs/performance-investigation-handover-2026-09-10.md
+docs/performance-investigation-final-report-2026-09-10.md
+docs/release-review-2026-09-10.md
 
 # ─── Generated example / dev output ──────────────────────────────────────────
 examples/
@@ -44,8 +47,14 @@ yarn-error.log*
 *.swp
 *.swo
 
+# ─── Claude Code local settings (per developer machine, not project config) ───
+.claude/settings.local.json
+
 # ─── Test / build artifacts ───────────────────────────────────────────────────
 coverage
+test-results/
+playwright-report/
+.benchmark-results/
 .nyc_output
 *.tsbuildinfo
 

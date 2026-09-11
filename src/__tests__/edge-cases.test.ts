@@ -67,7 +67,8 @@ describe('Edge Cases and Error Handling', () => {
         A[Node A]
         A --> A`;
       const result = parseMermaidSource(source);
-      expect(result.edges).toHaveLength(0); // Self-edges filtered out
+      expect(result.edges).toHaveLength(1);
+      expect(result.edges[0]).toMatchObject({ from: 'A', to: 'A' });
     });
   });
 

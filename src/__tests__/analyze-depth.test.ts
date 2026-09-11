@@ -57,7 +57,7 @@ describe('deep codebase analysis', () => {
   it('finds connections between source modules', async () => {
     const result = await analyzeCodebase(fixture(), 100);
 
-    expect(result.internalLinks).toContainEqual({ from: 'payment module', to: 'redis module' });
+    expect(result.internalLinks).toContainEqual({ from: 'payment module', to: 'redis module', source: 'src/payment/payment.module.ts' });
   });
 
   it('finds services in a nested deployment file', async () => {

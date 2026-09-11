@@ -89,7 +89,7 @@ describe('Phase 1: Interactive HTML Generation', () => {
   it('serializes layout data for client script', () => {
     const html = generateInteractiveHTML(testSVG, mermaidSource);
     expect(html).toContain('const NODES =');
-    expect(html).toContain('const EDGES =');
+    expect(html).toContain('let EDGES =');
     expect(html).toContain('const VIEWBOX =');
     expect(html).toContain('const MERMAID_SRC =');
   });
@@ -141,7 +141,6 @@ describe('Phase 1: Interactive HTML Generation', () => {
     expect(html).not.toContain('SQL LISTEN/NOTIFY...');
     expect(html).toContain('function labelAnchor');
     expect(html).toContain('function separateLabel');
-    expect(html).toContain('const placedLabels = []');
     expect(html).toContain('edge-label-secondary');
     expect(html).toContain('/^(uses|routes)$/i');
     expect(html).toContain('paint-order:stroke fill');

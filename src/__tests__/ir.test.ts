@@ -124,10 +124,10 @@ describe('graph validation', () => {
     expect(validateGraph(graph())).toEqual([]);
   });
 
-  it('reports a node with no edge', () => {
+  it('accepts a component without a known connection', () => {
     const value = graph();
     value.nodes.push({ id: 'Lost', label: 'Lost', shape: 'rect' });
-    expect(validateGraph(value).join(' ')).toContain('Lost');
+    expect(validateGraph(value)).toEqual([]);
   });
 
   it('reports an empty graph', () => {

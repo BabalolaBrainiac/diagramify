@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { writeFileSync, mkdirSync } from 'fs';
-import { join, resolve } from 'path';
-import { generateDiagram } from '../../core/generate.js';
+import { basename as pathBasename, join, resolve } from 'path';
+import { generateDiagram, prepareArchitecture } from '../../core/generate.js';
 import type { GenerateOptions, OutputFormat, DiagramType } from '../../core/types.js';
 
 const VALID_OUTPUT_FORMATS = new Set<OutputFormat>([
@@ -45,6 +45,9 @@ export const generateCommand = new Command()
   .option('--background <color>', 'Background color, or "transparent" to keep the alpha channel')
   .option('--provider <name>', 'LLM provider: anthropic|openai|google')
   .option('--model <id>', 'Model ID override. Skips model discovery.')
+  .option('--local-model <id>', 'Use an installed Ollama model without an API key')
+  .option('--local-model-url <url>', 'Local Ollama address')
+  .option('--prepare', 'Print evidence and a graph schema for a caller agent. No model call occurs.')
   .option(
     '--tier <tier>',
     'How much capability to ask for: fast, balanced, best (default: balanced)',
@@ -62,7 +65,9 @@ export const generateCommand = new Command()
     try {
       const codebasePath = options.path ? resolve(options.path) : process.cwd();
       const outDir = options.outdir ? resolve(options.outdir) : process.cwd();
-      const baseName = options.name || 'diagram';
+      // --name only ever names an output file; strip any directory component
+      // so it cannot write outside outDir (e.g. --name ../../x).
+      const baseName = pathBasename(options.name || 'diagram') || 'diagram';
 
       const formats = parseOutputFormats(options.out, ['svg', 'html', 'mmd']);
 
@@ -75,6 +80,8 @@ export const generateCommand = new Command()
         config: {
           provider: options.provider,
           model: options.model,
+          localModel: options.localModel,
+          localModelUrl: options.localModelUrl,
           tier: options.tier,
           discoverModels: options.discover,
           theme: options.theme,
@@ -86,12 +93,19 @@ export const generateCommand = new Command()
         },
       };
 
+      if (options.prepare) {
+        console.log(JSON.stringify(await prepareArchitecture(generateOptions), null, 2));
+        return;
+      }
       console.error('Generating diagram...');
       const result = await generateDiagram(generateOptions);
 
       if (options.json) {
         const jsonResult = {
           mermaid: result.mermaid,
+          graph: result.graph,
+          quality: result.quality,
+          html: result.html,
           svg: result.svg,
           png: result.png ? result.png.toString('base64') : undefined,
           jpeg: result.jpeg ? result.jpeg.toString('base64') : undefined,
@@ -160,6 +174,11 @@ export const generateCommand = new Command()
 
         const nodeCount = result.graph?.nodes.length ?? 0;
         console.error(`\n${nodeCount} services mapped. Tokens used: ${result.tokensUsed}`);
+      }
+
+      if (result.quality) {
+        console.error(`${result.quality.observedEdges} source dependencies. ${result.quality.inferredEdges} inferred connections.`);
+        if (result.quality.isolatedNodeIds.length) console.error(`${result.quality.isolatedNodeIds.length} components have no known connection.`);
       }
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));

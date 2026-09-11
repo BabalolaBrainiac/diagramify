@@ -1,6 +1,21 @@
 import { readFileSync } from 'fs';
 import { extname, relative, join, dirname, basename, normalize } from 'path';
-import glob from 'fast-glob';
+import fastGlob from 'fast-glob';
+
+type GlobPatterns = Parameters<typeof fastGlob>[0];
+type GlobOptions = NonNullable<Parameters<typeof fastGlob>[1]>;
+
+/**
+ * fast-glob follows symbolic links by default. A symlink inside an analyzed
+ * codebase (crafted or accidental) could then point outside the codebase
+ * root, and its target would be read and folded into the evidence and
+ * LLM-prompt output this module produces. Every glob call in this file goes
+ * through this wrapper so symlinks are never followed, without needing to
+ * repeat the option at each call site.
+ */
+function glob(patterns: GlobPatterns, options: GlobOptions = {}): Promise<string[]> {
+  return fastGlob(patterns, { ...options, followSymbolicLinks: false });
+}
 
 import { collectEvidence } from './evidence.js';
 import type {
@@ -18,9 +33,6 @@ const NPM_PACKAGE_MAP: Record<string, { service: string; type: DetectedDependenc
   'mysql2': { service: 'mysql', type: 'database' },
   'mongodb': { service: 'mongodb', type: 'database' },
   'mongoose': { service: 'mongodb', type: 'database' },
-  '@prisma/client': { service: 'postgresql', type: 'database' },
-  'drizzle-orm': { service: 'postgresql', type: 'database' },
-  'typeorm': { service: 'postgresql', type: 'database' },
   'sqlite3': { service: 'SQLite', type: 'database' },
   'better-sqlite3': { service: 'SQLite', type: 'database' },
   'elasticsearch': { service: 'Elasticsearch', type: 'database' },
@@ -59,27 +71,30 @@ const NPM_PACKAGE_MAP: Record<string, { service: string; type: DetectedDependenc
 };
 
 async function parsePackageJsonDeps(rootPath: string): Promise<DetectedDependency[]> {
-  try {
-    const content = readFileSync(join(rootPath, 'package.json'), 'utf-8');
-    const pkg = JSON.parse(content);
-    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-    return Object.keys(deps)
-      .filter(dep => NPM_PACKAGE_MAP[dep])
-      .map(dep => ({
-        name: NPM_PACKAGE_MAP[dep].service,
-        rawName: dep,
-        version: deps[dep],
-        type: NPM_PACKAGE_MAP[dep].type
-      }));
-  } catch {
-    return [];
+  const detected: DetectedDependency[] = [];
+  const manifests = await glob('**/package.json', {
+    cwd: rootPath, ignore: DEFAULT_IGNORE, followSymbolicLinks: false,
+  });
+  for (const source of manifests.sort()) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(rootPath, source), 'utf-8'));
+      const deps = { ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies };
+      for (const [name, version] of Object.entries(deps)) {
+        const info = NPM_PACKAGE_MAP[name];
+        if (!info) continue;
+        detected.push({ name: info.service, rawName: name, type: info.type,
+          version: typeof version === 'string' ? version : undefined, source });
+      }
+    } catch {
+      continue;
+    }
   }
+  return detected;
 }
 
 const PYTHON_PACKAGE_MAP: Record<string, { service: string; type: DetectedDependency['type'] }> = {
   'psycopg2': { service: 'postgresql', type: 'database' },
   'psycopg2-binary': { service: 'postgresql', type: 'database' },
-  'sqlalchemy': { service: 'postgresql', type: 'database' },
   'pymongo': { service: 'mongodb', type: 'database' },
   'redis': { service: 'redis', type: 'cache' },
   'celery': { service: 'Celery', type: 'messaging' },
@@ -106,7 +121,7 @@ async function parsePythonDeps(rootPath: string): Promise<DetectedDependency[]> 
       for (const line of content.split('\n')) {
         const pkg = line.split(/[><=!;[\s]/)[0].trim().toLowerCase();
         if (PYTHON_PACKAGE_MAP[pkg]) {
-          detected.push({ name: PYTHON_PACKAGE_MAP[pkg].service, rawName: pkg, type: PYTHON_PACKAGE_MAP[pkg].type });
+          detected.push({ name: PYTHON_PACKAGE_MAP[pkg].service, rawName: pkg, type: PYTHON_PACKAGE_MAP[pkg].type, source: src });
         }
       }
     } catch { continue; }
@@ -134,14 +149,12 @@ async function parseGoDeps(rootPath: string): Promise<DetectedDependency[]> {
     const content = readFileSync(join(rootPath, 'go.mod'), 'utf-8');
     return Object.entries(GO_DEP_MAP)
       .filter(([pkg]) => content.includes(pkg))
-      .map(([pkg, info]) => ({ name: info.service, rawName: pkg, type: info.type }));
+      .map(([pkg, info]) => ({ name: info.service, rawName: pkg, type: info.type, source: 'go.mod' }));
   } catch { return []; }
 }
 
 const RUST_DEP_MAP: Record<string, { service: string; type: DetectedDependency['type'] }> = {
   'tokio-postgres': { service: 'postgresql', type: 'database' },
-  'sqlx': { service: 'postgresql', type: 'database' },
-  'diesel': { service: 'postgresql', type: 'database' },
   'mongodb': { service: 'mongodb', type: 'database' },
   'redis': { service: 'redis', type: 'cache' },
   'rdkafka': { service: 'kafka', type: 'messaging' },
@@ -155,12 +168,11 @@ async function parseRustDeps(rootPath: string): Promise<DetectedDependency[]> {
     const content = readFileSync(join(rootPath, 'Cargo.toml'), 'utf-8');
     return Object.entries(RUST_DEP_MAP)
       .filter(([pkg]) => content.includes(pkg))
-      .map(([pkg, info]) => ({ name: info.service, rawName: pkg, type: info.type }));
+      .map(([pkg, info]) => ({ name: info.service, rawName: pkg, type: info.type, source: 'Cargo.toml' }));
   } catch { return []; }
 }
 
 const JAVA_DEP_MAP: Record<string, { service: string; type: DetectedDependency['type'] }> = {
-  'spring-boot-starter-data-jpa': { service: 'postgresql', type: 'database' },
   'postgresql': { service: 'postgresql', type: 'database' },
   'mysql-connector': { service: 'mysql', type: 'database' },
   'spring-boot-starter-data-mongodb': { service: 'mongodb', type: 'database' },
@@ -179,7 +191,7 @@ async function parseJavaDeps(rootPath: string): Promise<DetectedDependency[]> {
     try {
       const content = readFileSync(join(rootPath, manifest), 'utf-8');
       for (const [dep, info] of Object.entries(JAVA_DEP_MAP)) {
-        if (content.includes(dep)) detected.push({ name: info.service, rawName: dep, type: info.type });
+        if (content.includes(dep)) detected.push({ name: info.service, rawName: dep, type: info.type, source: manifest });
       }
     } catch { continue; }
   }
@@ -219,7 +231,7 @@ async function parseDotnetDeps(rootPath: string): Promise<DetectedDependency[]> 
         const pkg = match[1];
         const mapped = DOTNET_PACKAGE_MAP[pkg];
         if (mapped) {
-          detected.push({ name: mapped.service, rawName: pkg, version: match[2], type: mapped.type });
+          detected.push({ name: mapped.service, rawName: pkg, version: match[2], type: mapped.type, source: file });
         }
       }
     }
@@ -314,8 +326,8 @@ export async function traceImportGraph(
   rootPath: string,
   files: string[],
   components: string[] = [],
-): Promise<Array<{from: string; to: string}>> {
-  const links: Array<{from: string; to: string}> = [];
+): Promise<Array<{from: string; to: string; source: string}>> {
+  const links: Array<{from: string; to: string; source: string}> = [];
   const jsImportRe = /(?:from\s+|import\s*\(|require\s*\()\s*['"](\.[^'"]+)['"]/g;
   const pythonImportRe = /^\s*(?:from|import)\s+([.\w]+)/gm;
   for (const file of files.slice(0, 500)) {
@@ -332,7 +344,7 @@ export async function traceImportGraph(
         const targetPath = normalize(join(dirname(rel), m[1])).split('\\').join('/');
         const to = componentForFile(targetPath, components);
         if (to && from !== to && !targetPath.startsWith('..')) {
-          links.push({ from, to });
+          links.push({ from, to, source: rel });
         }
       }
 
@@ -341,7 +353,7 @@ export async function traceImportGraph(
         const importPath = m[1].replace(/^\.+/, '').split('.').join('/');
         const to = componentForFile(importPath, components);
         if (to && from !== to) {
-          links.push({ from, to });
+          links.push({ from, to, source: rel });
         }
       }
     } catch { continue; }
@@ -359,13 +371,13 @@ async function detectDependencies(rootPath: string): Promise<DetectedDependency[
 }
 
 const ENV_VAR_PATTERNS: Array<{ pattern: RegExp; service: string }> = [
-  { pattern: /DATABASE_URL|POSTGRES_URL|PG_URI/, service: 'postgresql' },
+  { pattern: /POSTGRES_URL|PG_URI/, service: 'postgresql' },
   { pattern: /MONGODB_URI|MONGO_URL/, service: 'mongodb' },
   { pattern: /REDIS_URL|REDIS_URI/, service: 'redis' },
   { pattern: /KAFKA_BROKERS|KAFKA_URL/, service: 'kafka' },
   { pattern: /RABBITMQ_URL|AMQP_URL/, service: 'rabbitmq' },
   { pattern: /STRIPE_/, service: 'stripe' },
-  { pattern: /SENDGRID_|SMTP_/, service: 'sendgrid' },
+  { pattern: /SENDGRID_/, service: 'sendgrid' },
   { pattern: /TWILIO_/, service: 'twilio' },
   { pattern: /AUTH0_/, service: 'auth0' },
   { pattern: /OKTA_/, service: 'okta' },
@@ -435,11 +447,16 @@ async function detectAPIEndpoints(rootPath: string, files: string[]): Promise<De
   return endpoints;
 }
 
-async function detectServiceDirectories(rootPath: string): Promise<{dirs: string[], links: Array<{from: string, to: string}>}> {
+async function detectServiceDirectories(rootPath: string) {
   const dirs = new Set<string>();
+  const sources: Array<{ component: string; source: string }> = [];
+  const addComponent = (component: string, source: string) => {
+    dirs.add(component);
+    if (!sources.some(item => item.component === component && item.source === source)) sources.push({ component, source });
+  };
   const patterns = ['apps/', 'services/', 'packages/', 'microservices/'];
   const pkgMap: Record<string, string> = {}; // pkgName -> dirName
-  const allPkgDeps: Array<{dirName: string, deps: string[]}> = [];
+  const allPkgDeps: Array<{dirName: string, deps: string[], source: string}> = [];
   
   try {
     const moduleProjects = await glob('src/Modules/*/**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
@@ -447,7 +464,7 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
       const parts = project.split('/');
       const moduleIndex = parts.indexOf('Modules');
       if (moduleIndex >= 0 && parts[moduleIndex + 1]) {
-        dirs.add(parts[moduleIndex + 1]);
+        addComponent(parts[moduleIndex + 1], project);
       }
     }
 
@@ -459,7 +476,7 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
       const withoutExtension = basename(file).replace(/\.[^.]+$/, '');
       const stem = withoutExtension.replace(/\.(?:module|worker|consumer|job)$/i, '');
       if (stem && !['app', 'index', 'main'].includes(stem.toLowerCase())) {
-        dirs.add(`${stem} module`);
+        addComponent(`${stem} module`, file);
       }
     }
 
@@ -472,7 +489,7 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
       if (!stem || ['__init__', 'index', 'api_blueprints'].includes(stem.toLowerCase())) {
         continue;
       }
-      dirs.add(`${stem} endpoint`);
+      addComponent(`${stem} endpoint`, file);
     }
 
     const serviceDescriptors = await glob(
@@ -489,7 +506,7 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
         !/^(?:test|tests|testing|examples?|docs?|scripts?|node_modules)$/i.test(parent) &&
         (nestedWorkspace || deploymentRoot)
       ) {
-        dirs.add(`${parent} service`);
+        addComponent(deploymentRoot ? `${parent} service` : parent, file);
       }
     }
 
@@ -503,7 +520,7 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
         for (const p of patterns) {
           if (parentDir.startsWith(p)) {
             const dirName = parts[parts.length - 2];
-            dirs.add(dirName); // e.g. "api" from "apps/api/package.json"
+            addComponent(dirName, f);
             
             if (f.endsWith('package.json')) {
               try {
@@ -512,8 +529,8 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
                 if (pkg.name) {
                   pkgMap[pkg.name] = dirName;
                 }
-                const deps = Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) });
-                allPkgDeps.push({ dirName, deps });
+                const deps = Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies });
+                allPkgDeps.push({ dirName, deps, source: f });
               } catch {
                 // Ignore unreadable or invalid package manifests during best-effort analysis.
               }
@@ -526,16 +543,16 @@ async function detectServiceDirectories(rootPath: string): Promise<{dirs: string
     // Ignore scan failures and return any service directories found so far.
   }
   
-  const links: Array<{from: string, to: string}> = [];
-  for (const { dirName, deps } of allPkgDeps) {
+  const links: Array<{from: string, to: string, source: string}> = [];
+  for (const { dirName, deps, source } of allPkgDeps) {
     for (const dep of deps) {
       if (pkgMap[dep] && pkgMap[dep] !== dirName) {
-        links.push({ from: dirName, to: pkgMap[dep] });
+        links.push({ from: dirName, to: pkgMap[dep], source });
       }
     }
   }
   
-  return { dirs: Array.from(dirs).slice(0, 40), links };
+  return { dirs: Array.from(dirs).sort(), links, sources };
 }
 
 interface SourceServiceRule {
@@ -625,8 +642,8 @@ function componentFromProjectPath(rootPath: string, projectPath: string): string
   return basename(projectPath).replace(/\.csproj$/i, '');
 }
 
-async function traceDotnetProjectReferences(rootPath: string): Promise<Array<{from: string; to: string}>> {
-  const links: Array<{from: string; to: string}> = [];
+async function traceDotnetProjectReferences(rootPath: string): Promise<Array<{from: string; to: string; source: string}>> {
+  const links: Array<{from: string; to: string; source: string}> = [];
   try {
     const projects = await glob('**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
     for (const relProject of projects) {
@@ -638,7 +655,7 @@ async function traceDotnetProjectReferences(rootPath: string): Promise<Array<{fr
         const targetPath = join(dirname(projectPath), match[1].split('\\').join('/'));
         const to = componentFromProjectPath(rootPath, targetPath);
         if (from !== to) {
-          links.push({ from, to });
+          links.push({ from, to, source: relProject });
         }
       }
     }
@@ -667,6 +684,9 @@ function deduplicateServices(services: string[]): string[] {
 }
 
 const DEFAULT_IGNORE = [
+  '**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**', '**/vendor/**',
+  '**/bin/**', '**/obj/**', '**/*.pem', '**/*.key', '**/credentials.json', '**/service-account.json',
+  '**/.env*',
   'node_modules',
   '.git',
   '.gitignore',
@@ -735,6 +755,7 @@ async function walkFiles(root: string, maxFiles: number): Promise<string[]> {
     cwd: root,
     ignore: DEFAULT_IGNORE,
     dot: false,
+    followSymbolicLinks: false,
   });
 
   const scored = files
@@ -892,6 +913,7 @@ function estimateDiagramType(summary: string): DiagramType {
 }
 
 export async function analyzeCodebase(rootPath: string, maxFiles: number = 1000): Promise<AnalysisResult> {
+  if (!Number.isInteger(maxFiles) || maxFiles < 1) throw new Error('The file limit must be a positive integer.');
   const files = await walkFiles(rootPath, maxFiles);
   const fileTree = await buildFileTree(files, rootPath);
   const snippets = await readTopFiles(files);
@@ -921,12 +943,23 @@ export async function analyzeCodebase(rootPath: string, maxFiles: number = 1000)
 
   const endpointCandidates = await findEndpointCandidateFiles(rootPath);
 
-  const [apiEndpoints, importLinks, projectLinks, serviceLinks] = await Promise.all([
+  const [apiEndpoints, importLinks, projectLinks, sourceLinks] = await Promise.all([
     detectAPIEndpoints(rootPath, endpointCandidates.length > 0 ? endpointCandidates : files),
     traceImportGraph(rootPath, files, serviceDirectories),
     traceDotnetProjectReferences(rootPath),
     detectServiceLinks(rootPath, files, serviceDirectories),
   ]);
+
+  const manifestLinks: DetectedServiceLink[] = depsByLang.flatMap(dependency => {
+    const from = dependency.source ? componentForFile(dependency.source, serviceDirectories) : undefined;
+    return from && dependency.source ? [{
+      from, to: dependency.name, label: 'depends on', kind: 'sync', source: dependency.source,
+    }] : [];
+  });
+  const serviceLinks = [...sourceLinks, ...manifestLinks];
+  evidence.push(...depsByLang.flatMap(dependency => dependency.source ? [{
+    service: dependency.name, source: dependency.source, hint: dependency.rawName,
+  }] : []));
 
   const allServices = deduplicateServices([
     ...depsByLang.map(d => d.name),
@@ -969,8 +1002,10 @@ export async function analyzeCodebase(rootPath: string, maxFiles: number = 1000)
     envServices,
     apiEndpoints,
     serviceDirectories,
+    componentSources: structure.sources,
     internalLinks: [...internalLinks, ...importLinks, ...projectLinks],
     serviceLinks,
     evidence,
+    coverage: { selectedFiles: files.length, fileLimit: maxFiles, limitReached: files.length >= maxFiles },
   };
 }

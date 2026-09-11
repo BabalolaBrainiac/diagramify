@@ -1,4 +1,6 @@
 import type { ArchitectureGraph } from './ir.js';
+import type { ArchitectureEngine } from './engines.js';
+import type { GraphQuality } from './graph-quality.js';
 
 export type DiagramType =
   | 'flowchart'
@@ -40,6 +42,10 @@ export interface DiagramifyConfig {
   temperature?: number;
   maxTokens?: number;
   direction?: 'LR' | 'TD' | 'TB' | 'RL' | 'BT';
+  /** Use an installed Ollama model. No model download occurs. */
+  localModel?: string;
+  /** Local Ollama address. The default is http://127.0.0.1:11434. */
+  localModelUrl?: string;
 }
 
 export interface GenerateOptions {
@@ -51,6 +57,8 @@ export interface GenerateOptions {
   config?: Partial<DiagramifyConfig>;
   /** Build the graph from the codebase alone. No provider and no network. */
   noLLM?: boolean;
+  /** A caller can supply interpretation without a provider key. */
+  engine?: ArchitectureEngine;
 }
 
 export interface RenderOptions {
@@ -92,6 +100,7 @@ export interface DiagramifyResult {
   json?: string;
   diagramType: DiagramType;
   tokensUsed?: number;
+  quality?: GraphQuality;
 }
 
 export interface DetectedDependency {
@@ -99,6 +108,7 @@ export interface DetectedDependency {
   rawName: string;
   version?: string;
   type: 'database' | 'cache' | 'messaging' | 'auth' | 'monitoring' | 'compute' | 'storage' | 'other';
+  source?: string;
 }
 
 export interface DetectedEndpoint {
@@ -134,8 +144,10 @@ export interface AnalysisResult {
   envServices: string[];
   apiEndpoints: DetectedEndpoint[];
   serviceDirectories: string[];
-  internalLinks?: Array<{from: string; to: string}>;
+  internalLinks?: Array<{from: string; to: string; source?: string}>;
+  componentSources?: Array<{ component: string; source: string }>;
   serviceLinks?: DetectedServiceLink[];
   /** Components proved by an environment file, a container file, or infra code. */
   evidence?: EvidenceItem[];
+  coverage?: { selectedFiles: number; fileLimit: number; limitReached: boolean };
 }

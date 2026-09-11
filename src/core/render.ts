@@ -6,9 +6,10 @@ import { flattenSVGColors } from './styling/flatten.js';
 import { fitSubgraphBoxes } from './styling/subgraph-fit.js';
 import { svgToPDF } from './export/pdf.js';
 import { graphToDrawio, graphToExcalidraw } from './export/editable.js';
-import { mermaidToGraph } from './ir-mermaid.js';
+import { graphToMermaid, mermaidToGraph } from './ir-mermaid.js';
 import { attachLayout } from './ir-layout.js';
-import { serializeGraph, type ArchitectureGraph } from './ir.js';
+import { type ArchitectureGraph } from './ir.js';
+import { readGraphDocument, serializeGraphDocument } from './graph-document.js';
 import { getTheme } from './styling/themes.js';
 import type { DiagramifyResult, OutputFormat, RenderOptions, DiagramType } from './types.js';
 
@@ -112,16 +113,14 @@ function detectDiagramType(mermaidSource: string): DiagramType {
 }
 
 function renderSVG(
-  mermaidSource: string,
+  rawSVG: string,
   theme?: string,
   darkMode: boolean = false,
   backgroundColor?: string,
   membership?: Map<string, string[]>,
 ): string {
-  const themeConfig = theme && theme in THEMES ? THEMES[theme as keyof typeof THEMES] : undefined;
-
   try {
-    let svg = renderMermaidSVG(mermaidSource, themeConfig);
+    let svg = rawSVG;
     svg = applyThemeVars(svg, theme, darkMode);
 
     const diagramTheme = getTheme(theme, darkMode ? 'dark' : 'light');
@@ -206,7 +205,8 @@ export async function renderDiagram(
 
   if (needsSVG || needsGraph) {
     try {
-      const rawSVG = renderMermaidSVG(mermaidSource);
+      const themeConfig = options.theme && options.theme in THEMES ? THEMES[options.theme as keyof typeof THEMES] : undefined;
+      const rawSVG = renderMermaidSVG(mermaidSource, themeConfig);
       const baseSVG = applyThemeVars(rawSVG, options.theme, options.darkMode ?? false);
 
       if (formats.includes('html')) {
@@ -223,7 +223,7 @@ export async function renderDiagram(
       const wantsSVGFile = formats.some((f) => f === 'svg' || f === 'png' || f === 'jpeg' || f === 'pdf');
       if (wantsSVGFile || needsGraph) {
         layoutSVG = renderSVG(
-          mermaidSource,
+          rawSVG,
           options.theme,
           options.darkMode ?? false,
           options.backgroundColor,
@@ -265,13 +265,7 @@ export async function renderDiagram(
 
   if (formats.includes('pdf')) {
     if (!layoutSVG) {
-      layoutSVG = renderSVG(
-        mermaidSource,
-        options.theme,
-        options.darkMode ?? false,
-        options.backgroundColor,
-        membership,
-      );
+      throw new Error('PDF export requires rendered geometry.');
     }
     try {
       result.pdf = svgToPDF(layoutSVG, {
@@ -288,7 +282,7 @@ export async function renderDiagram(
     // editable export keeps the layout the reader saw.
     let graph: ArchitectureGraph = options.graph ?? mermaidToGraph(mermaidSource, options.title);
     if (layoutSVG) {
-      graph = attachLayout(graph, layoutSVG);
+      graph = attachLayout(graph, layoutSVG, Boolean(options.graph));
     }
     result.graph = graph;
 
@@ -299,9 +293,22 @@ export async function renderDiagram(
       result.excalidraw = graphToExcalidraw(graph);
     }
     if (formats.includes('json')) {
-      result.json = serializeGraph(graph);
+      result.json = serializeGraphDocument(graph);
     }
   }
 
   return result;
+}
+
+/** Accepts a validated graph from an agent without a model call. */
+export async function renderGraph(
+  graph: ArchitectureGraph,
+  formats: OutputFormat[],
+  options: RenderOptions = {},
+): Promise<Omit<DiagramifyResult, 'tokensUsed'>> {
+  const document = readGraphDocument(graph);
+  const result = await renderDiagram(graphToMermaid(document), formats, {
+    ...options, graph: document, title: options.title ?? document.title,
+  });
+  return { ...result, graph: result.graph ?? document };
 }

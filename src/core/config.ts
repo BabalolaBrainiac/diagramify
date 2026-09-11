@@ -6,7 +6,7 @@ import { apiKeyFor, detectProvider } from './models.js';
 const DEFAULTS: Omit<DiagramifyConfig, 'provider'> = {
   theme: 'default',
   defaultOutput: ['svg', 'mmd'],
-  temperature: 0.7,
+  temperature: 0,
   maxTokens: 8192,
   tier: 'balanced',
   discoverModels: true,
@@ -42,6 +42,9 @@ function loadEnvConfig(): Partial<DiagramifyConfig> {
   if (process.env.DIAGRAMIFY_MODEL) {
     config.model = process.env.DIAGRAMIFY_MODEL;
   }
+
+  if (process.env.DIAGRAMIFY_LOCAL_MODEL) config.localModel = process.env.DIAGRAMIFY_LOCAL_MODEL;
+  if (process.env.DIAGRAMIFY_LOCAL_MODEL_URL) config.localModelUrl = process.env.DIAGRAMIFY_LOCAL_MODEL_URL;
 
   if (process.env.DIAGRAMIFY_THEME) {
     config.theme = process.env.DIAGRAMIFY_THEME;

@@ -5,7 +5,9 @@ description: Generate, revise, render, preview, compare, and automate Mermaid di
 
 # Diagramify
 
-Use Diagramify to produce evidence-based Mermaid diagrams and validated visual outputs. Treat the `.mmd` file as the editable source of truth.
+Use Diagramify to produce diagrams from source evidence.
+Use graph JSON when evidence and saved positions must survive export.
+Use Mermaid for text authoring.
 
 ## Choose The Workflow
 
@@ -49,6 +51,19 @@ Convert the request into a concrete description before invoking Diagramify. Incl
 
 Choose a specific diagram type instead of `auto` when the request clearly implies one. Review and render-validate the generated `.mmd` before completion.
 
+## Use The Caller Agent
+
+1. Run `diagramify generate --path . --prepare > request.json`.
+2. Inspect the supplied evidence and relevant source files.
+3. Write `proposal.json` using the request schema.
+4. Use baseline identifiers for existing components.
+5. Return only additions that the evidence supports.
+6. Run `diagramify render proposal.json --request request.json --offline --out html,json`.
+7. Inspect inferred claims and unknown connections.
+
+This workflow needs no second model call.
+Diagramify retains source findings and validates the proposal before rendering.
+
 ## Revise Or Author Mermaid
 
 Follow [references/authoring.md](references/authoring.md) when editing Mermaid. Preserve stable node IDs during revisions so diffs remain meaningful.
@@ -69,7 +84,8 @@ For visual review, prefer interactive HTML. Use SVG for deterministic, inspectab
 ## Operational Rules
 
 - Check whether `diagramify` is available before installing anything. Prefer the project's local dependency through `npx diagramify-ai`; use a global binary only when already installed.
-- Generation requires an API key for the selected provider. Rendering, previewing, and diffing existing Mermaid do not require an LLM key.
+- Source analysis and caller proposals require no provider key.
+- Use `--local-model` for an installed Ollama model. Hosted providers remain optional.
 - Never expose API-key values in commands, output, diagrams, or committed files.
 - Keep generated artifacts in the user-requested location. Otherwise default to `diagrams/` with descriptive base names such as `system-context`, `request-flow`, or `data-model`.
 - Do not overwrite an existing `.mmd` source unless the user requested revision. Use a new descriptive name or preserve the prior version for diffing.

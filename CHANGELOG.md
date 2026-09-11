@@ -8,6 +8,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-10
+
+### Added
+
+- Optional local Ollama models without provider keys or automatic model downloads.
+- Caller engine interfaces and a `generate --prepare` to `render --request` workflow.
+- Graph documents that preserve evidence, descriptions, identifiers, and saved geometry.
+- Source evidence and keyboard access in the component detail panel.
+- Browser interaction tests and a repeatable rendering benchmark.
+- Atomic graph operations, revision checks, and complete undo for browser and agent edits.
+- A shared local preview API for browser edits and agent operations.
+- React change callbacks and browser bundle tests.
+- Keyboard support for legend filter controls, and for renaming a focused node while in edit mode.
+- Browser test coverage for the router's obstacle avoidance during a drag, and for group boundaries staying correct after a member is dragged.
+
+### Changed
+
+- Codebase generation uses source analysis when no model credentials are available.
+- Model prompts request supported additions without minimum node counts or compulsory connections.
+- Source findings survive model proposals. Invalid references fail validation.
+- Nested package dependencies retain their module ownership and source paths.
+- Generic database libraries no longer imply PostgreSQL.
+- Dragging reuses connection elements and avoids browser path measurements.
+- HTML and image exports share one Mermaid layout.
+- Preview updates retain the page, viewport, filters, and independent local edits.
+- Preview and watch use one HTTP port, with WebSocket updates at `/updates`.
+- React source updates retain the iframe and its graph history.
+- Mermaid editing uses the renderer parser for chained connections, groups, and arrows in both directions.
+- PNG and JPEG export of large diagrams (250+ nodes) is about 15 times faster; shadow filters are now bound to each shape instead of the whole page.
+- Checking only whether the graph changed no longer clones the full graph; reading the graph itself still does.
+- The router's obstacle checks during a drag now use a spatial index instead of scanning every node in the diagram.
+
+### Fixed
+
+- Edge routes no longer cut through an unrelated node's card. The router now tries a wider detour and checks the full path against every node, not only its own crossing point.
+- Edge labels no longer overlap node cards. Label placement now reserves node space, not only space already used by other labels.
+- SVG export now matches the live viewer's edge width, dash pattern, and label size, instead of using default values.
+- A node's label is no longer lost when an edge in the Mermaid source references that node before the node's own label declaration.
+- The legend now lists only the service types present in the diagram, and its list stays in sync with types added or changed during live editing.
+- Dimmed nodes, from search or a legend filter, keep readable contrast in both themes instead of fading toward the page background.
+- The toolbar no longer overflows the window below about 900px wide.
+
 ## [0.3.0] — 2026-09-04
 
 ### Added

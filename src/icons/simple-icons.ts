@@ -551,32 +551,32 @@ export function getIconURL(service: string, hexColor?: string, _offline = false)
   // Check AWS inline SVGs
   const inline = AWS_INLINE_SVG[slug];
   if (inline) {
-    return 'data:image/svg+xml;base64,' + Buffer.from(inline).toString('base64');
+    return 'data:image/svg+xml;base64,' + encodeSVG(inline);
   }
 
   // Check general inline SVGs
   const generalInline = INLINE_SVG[slug];
   if (generalInline) {
     const colored = generalInline.replace(/currentColor/g, color);
-    return 'data:image/svg+xml;base64,' + Buffer.from(colored).toString('base64');
+    return 'data:image/svg+xml;base64,' + encodeSVG(colored);
   }
 
   // Brand icons generated from simple-icons at build time. These cover most
   // services, need no network, and carry the correct brand colour.
   const brand = brandIconSVG(slug, color);
   if (brand) {
-    return 'data:image/svg+xml;base64,' + Buffer.from(brand).toString('base64');
+    return 'data:image/svg+xml;base64,' + encodeSVG(brand);
   }
 
   // A semantic symbol states the component type without borrowing a vendor logo.
   const semantic = semanticIconSVG(service, color);
   if (semantic) {
-    return 'data:image/svg+xml;base64,' + Buffer.from(semantic).toString('base64');
+    return 'data:image/svg+xml;base64,' + encodeSVG(semantic);
   }
 
   // No mapping found, return fallback SVG as data URI
   const fallbackSvg = getFallbackSVG(service, color);
-  return 'data:image/svg+xml;base64,' + Buffer.from(fallbackSvg).toString('base64');
+  return 'data:image/svg+xml;base64,' + encodeSVG(fallbackSvg);
 }
 
 export function getFallbackSVG(label: string, color: string = '#999999'): string {
@@ -596,6 +596,10 @@ export function getFallbackSVG(label: string, color: string = '#999999'): string
       ${chars}
     </text>
   </svg>`;
+}
+
+function encodeSVG(value: string): string {
+  return btoa(Array.from(new TextEncoder().encode(value), byte => String.fromCharCode(byte)).join(''));
 }
 
 export function hasServiceMapping(service: string): boolean {

@@ -12,6 +12,11 @@ Install or modify dependencies only with user approval when the package is unava
 
 ## Generation Fails Before Rendering
 
+- Use `--no-llm` to check the source analysis without inference.
+- For local inference, start Ollama and confirm that the selected model is installed.
+- A saved proposal must use known baseline identifiers for existing components.
+- A valid output schema does not prove architecture accuracy. Inspect the source evidence.
+
 - Confirm the selected provider and its API-key environment variable.
 - Confirm the model ID is valid for that provider.
 - Retry with an explicit `--provider` and, if needed, `--model`.

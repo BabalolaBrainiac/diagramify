@@ -14,6 +14,8 @@
 
 import { z } from 'zod';
 import { getServiceDefinition, type ServiceType } from '../icons/services.js';
+import { nodeShapeSchema, readGraphDocument } from './graph-document.js';
+export { nodeShapeSchema } from './graph-document.js';
 
 export type Direction = 'TD' | 'LR' | 'BT' | 'RL';
 
@@ -27,6 +29,13 @@ export type NodeShape =
   | 'hexagon';
 
 export type EdgeKind = 'sync' | 'async';
+
+export type ClaimStatus = 'observed' | 'inferred' | 'proposed';
+
+export interface SourceReference {
+  source: string;
+  hint?: string;
+}
 
 /** Pixel geometry taken from a rendered diagram. A format such as Excalidraw needs it. */
 export interface NodeLayout {
@@ -52,9 +61,12 @@ export interface IRNode {
   description?: string;
   /** Filled after rendering. Absent before layout runs. */
   layout?: NodeLayout;
+  status?: ClaimStatus;
+  evidence?: SourceReference[];
 }
 
 export interface IREdge {
+  id?: string;
   from: string;
   to: string;
   /** What crosses the edge, such as `REST`, `SQL`, or `events`. */
@@ -63,6 +75,8 @@ export interface IREdge {
   bidirectional: boolean;
   /** Filled after rendering, as a flat list of x and y pairs. */
   points?: number[];
+  status?: ClaimStatus;
+  evidence?: SourceReference[];
 }
 
 export interface IRGroup {
@@ -97,16 +111,6 @@ export interface ArchitectureGraph {
  * colors are decided by code, never by the model.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-export const nodeShapeSchema = z.enum([
-  'rect',
-  'round',
-  'stadium',
-  'cylinder',
-  'circle',
-  'diamond',
-  'hexagon',
-]);
-
 export const architectureGraphSchema = z.object({
   title: z.string().describe('Short title for the diagram.').optional(),
   direction: z
@@ -134,7 +138,7 @@ export const architectureGraphSchema = z.object({
           .describe('One short sentence on what this component does. May be empty.'),
       }),
     )
-    .describe('Every service, store, queue, and external system. Aim for 20 to 60.'),
+    .describe('Components supported by the supplied evidence. Do not target a node count.'),
   edges: z
     .array(
       z.object({
@@ -148,7 +152,7 @@ export const architectureGraphSchema = z.object({
           .describe('Use "async" for a queue, an event, or a webhook.'),
       }),
     )
-    .describe('Every node needs at least one edge. Leave no node unconnected.'),
+    .describe('Relationships supported by evidence. An unknown relationship must remain absent.'),
 });
 
 export type ArchitectureGraphInput = z.infer<typeof architectureGraphSchema>;
@@ -325,16 +329,7 @@ export function validateGraph(graph: ArchitectureGraph): string[] {
     }
   }
 
-  const connected = new Set<string>();
-  for (const edge of graph.edges) {
-    connected.add(edge.from);
-    connected.add(edge.to);
-  }
-
-  const isolated = graph.nodes.filter((n) => !connected.has(n.id)).map((n) => n.id);
-  if (isolated.length > 0 && graph.nodes.length > 1) {
-    problems.push(`These nodes have no edge: ${isolated.join(', ')}.`);
-  }
+  if (ids.size !== graph.nodes.length) problems.push('Node identifiers must be unique.');
 
   return problems;
 }
@@ -387,29 +382,5 @@ export function deserializeGraph(json: string): ArchitectureGraph {
     throw new Error(`Unsupported IR version: ${raw?.version}. This build reads version 1.`);
   }
 
-  return {
-    version: 1,
-    title: raw.title ?? undefined,
-    direction: raw.direction ?? 'LR',
-    groups: (raw.groups ?? []).map((g: any) => ({
-      id: g.id,
-      label: g.label,
-      nodeIds: g.nodeIds ?? [],
-    })),
-    nodes: (raw.nodes ?? []).map((n: any) => ({
-      id: n.id,
-      label: n.label,
-      shape: n.shape ?? 'rect',
-      groupId: n.groupId ?? undefined,
-      serviceType: n.serviceType ?? undefined,
-      description: n.description ?? undefined,
-    })),
-    edges: (raw.edges ?? []).map((e: any) => ({
-      from: e.from,
-      to: e.to,
-      label: e.label ?? undefined,
-      kind: e.kind ?? 'sync',
-      bidirectional: Boolean(e.bidirectional),
-    })),
-  };
+  return readGraphDocument(raw);
 }

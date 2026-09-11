@@ -8,7 +8,8 @@
 
 Diagramify owns the architecture graph and rendering pipeline. It exports interactive HTML, images, PDF, editable files, JSON, and Mermaid source.
 
-The package provides a CLI, an npm library, and an agent skill. Optional model support includes Anthropic, OpenAI, and Google.
+The package provides a CLI, an npm library, and an agent skill. Optional engines include local Ollama models and caller agents.
+Hosted model providers remain available.
 
 ---
 
@@ -20,7 +21,10 @@ The package provides a CLI, an npm library, and an agent skill. Optional model s
 - **Fit-to-content on load** — large diagrams auto-scale to fill the viewport on open
 - **Orthogonal edge routing** — edges draw as clean L/Z-shaped paths with rounded corners, not long diagonal arcs
 - **Works with no LLM at all** — `--no-llm` builds the diagram from the codebase alone. No API key, no network, no cost
-- **Typed architecture graph** — one IR that every renderer and exporter reads. A model fills a schema, so the result does not change with the provider
+- **Typed architecture graph** — shared validation, layout, and export rules. Model interpretation can still differ between providers.
+- **Local models** — use an installed Ollama model without an API key. Diagramify does not download models automatically.
+- **Caller agents** — prepare source evidence, accept a graph proposal, and render without a second model call.
+- **Evidence inspection** — inspect source files, inferred claims, and components without known connections.
 - **Multiple output formats** — `html`, `svg`, `png`, `jpeg`, `mmd`, `pdf`, `drawio`, `excalidraw`, `json`
 - **Vector PDF** — real shapes and selectable text, not a picture. No dependency and no headless browser
 - **Editable handoff** — `drawio` and `excalidraw` exports keep the layout, so a reviewer can correct the diagram in a tool they already run
@@ -29,7 +33,8 @@ The package provides a CLI, an npm library, and an agent skill. Optional model s
 - **Fully offline viewer** — `--offline` produces one HTML file that makes no network request
 - **Diagram diffing** — `diagramify diff` compares two `.mmd` files and highlights changes
 - **CI integration** — `diagramify ci` generates GitHub Actions / GitLab CI workflows
-- **Hot-reload preview** — `diagramify preview` and `diagramify watch` serve and auto-reload on file changes via WebSocket
+- **Live preview** — file and agent updates preserve the page, viewport, and independent local edits.
+- **Shared graph editing** — atomic operations, revision checks, and complete undo for nodes, connections, groups, and positions.
 - **One key is all you need** — the provider is chosen from whichever key is set, and the newest suitable model is discovered from the provider itself, not pinned in this package
 - **LLM-agnostic** — Claude, OpenAI, or Google Gemini, through schema-constrained output
 - **React component** — embed the interactive viewer in any React app
@@ -80,10 +85,14 @@ cp -R node_modules/diagramify-ai/skills/diagramify ~/.claude/skills/
 
 ```bash
 cd my-project
-diagramify generate --out html,svg,mmd --provider google
+diagramify generate --offline --out html,svg,mmd,json
 ```
 
 Opens to an interactive HTML file with draggable nodes, zoom, themes, and export.
+
+Without credentials, codebase generation uses source analysis automatically.
+`--offline` also disables hosted fonts in the viewer.
+See [engine workflows](docs/engines.md) for local models and caller agents.
 
 ### Generate from a description
 
@@ -106,18 +115,18 @@ diagramify render diagram.mmd --out html,svg,png
 |---------|---------|------------|------------|
 | `diagramify generate` | AI-generate from codebase or description | — | — |
 | `diagramify render` | Render an existing `.mmd` file | — | — |
-| `diagramify preview [--file]` | Interactive editor with POST API; file watching with `--file` | ✅ | ✅ |
-| `diagramify watch <file>` | Lightweight `.mmd` file watcher; no Express | ✅ | ✅ |
-| `diagramify dev [--file]` | Alias for `preview` — recommended entry point for dev workflows | ✅ | ✅ |
+| `diagramify preview [--file]` | Shared viewer and agent API; optional file watching | Yes | Yes |
+| `diagramify watch <file>` | File watching, shared viewer, and HTML output | Yes | Yes |
+| `diagramify dev [--file]` | Alias for `preview` | Yes | Yes |
 | `diagramify check` | Fail a build when the diagram no longer matches the code | — | — |
 | `diagramify models` | Show which provider and model a key resolves to | — | — |
 | `diagramify diff` | Compare two `.mmd` files visually | — | — |
 | `diagramify ci` | Generate CI workflow files | — | — |
 | `diagramify init` | Scaffold a config file | — | — |
 
-> **When to use `watch` vs `preview`:**
-> - `watch <file>` — fastest feedback loop for editing a `.mmd` file; no Express, low overhead
-> - `preview --file <path>` (or `dev --file <path>`) — same file-watch experience **plus** the POST `/api/update` API for tool integrations and the interactive upload mode when `--file` is omitted
+`preview` and `watch` share the same graph server and agent API.
+`watch` requires a file and writes `watch-preview.html`.
+`preview` can start with a sample diagram when no file is supplied.
 
 ```bash
 # Fastest .mmd edit loop
@@ -150,6 +159,9 @@ diagramify generate [options]
 | `--name <name>` | `diagram` | Base filename |
 | `--provider <name>` | `anthropic` | `anthropic` \| `openai` \| `google` |
 | `--model <id>` | provider default | Override model ID |
+| `--local-model <id>` | none | Use an installed Ollama model without an API key |
+| `--local-model-url <url>` | `http://127.0.0.1:11434` | Local Ollama address |
+| `--prepare` | false | Print source evidence and an output schema for a caller agent |
 | `--theme <name>` | `light` | Diagram theme |
 | `--stdout` | — | Print Mermaid source to stdout |
 | `--json` | — | Output JSON with base64 images |
@@ -176,7 +188,7 @@ diagramify generate --provider google --model gemini-flash-latest --out html,svg
 
 ### `diagramify render`
 
-Render an existing `.mmd` file to output formats.
+Render Mermaid, a graph document, or an agent proposal to output formats.
 
 ```
 diagramify render <input.mmd> [options]
@@ -184,6 +196,8 @@ diagramify render <input.mmd> [options]
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--input-format <format>` | from extension | `mermaid`, `json`, or `proposal` |
+| `--request <path>` | none | Complete a proposal using a saved `generate --prepare` request |
 | `--out <formats>` | `svg,html` | `html,svg,png,jpeg,mmd,pdf,drawio,excalidraw,json` |
 | `--outdir <dir>` | input file dir | Output directory |
 | `--name <name>` | `diagram` | Output filename |
@@ -204,7 +218,7 @@ diagramify render diagram.mmd --out png --width 2400
 
 ### `diagramify preview` / `diagramify dev`
 
-Interactive diagram editor with WebSocket hot-reload. `dev` is an alias for `preview`.
+Interactive diagram editor with updates that retain user state. `dev` is an alias for `preview`.
 
 ```
 diagramify preview [--file <path>] [--port <n>] [--theme <t>] [--open]
@@ -213,8 +227,8 @@ diagramify dev    [--file <path>] [--port <n>] [--theme <t>] [--open]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--file <path>` | — | Watch a `.mmd` file and hot-reload on every save |
-| `--port <n>` | `3000` | HTTP server port (WebSocket on port+1) |
+| `--file <path>` | — | Watch a `.mmd` file and update the shared graph |
+| `--port <n>` | `3000` | Local HTTP and WebSocket port |
 | `--theme <t>` | `light` | Diagram theme |
 | `--open` | — | Open browser automatically |
 
@@ -222,7 +236,11 @@ diagramify dev    [--file <path>] [--port <n>] [--theme <t>] [--open]
 diagramify dev --file diagram.mmd --open
 ```
 
-POST Mermaid source to `/api/update` to update the diagram programmatically. Hot-reload is broadcast to all open browser tabs.
+Read `/api/graph` to obtain the graph and its revision.
+POST `{ expectedRevision, operations }` to `/api/operations` to apply an atomic edit.
+POST Mermaid text to `/api/update` to update the source.
+Connected viewers receive graph updates through `/updates` without a page reload.
+See [shared graph editing](docs/live-editing.md) for examples and conflict handling.
 
 Keyboard shortcuts in the interactive HTML viewer:
 
@@ -240,11 +258,15 @@ Keyboard shortcuts in the interactive HTML viewer:
 | `Ctrl+Z` | Undo |
 | `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
 | `Ctrl+C` / `Ctrl+V` | Copy / paste node |
-| `Del` / `Backspace` | Delete selected node or edge |
+| `Del` / `Backspace` | Delete the selected node, connection, or group |
+
+Use Command instead of Ctrl on macOS.
+Undo and redo preserve the complete graph. Deleting a group retains its nodes.
 
 ### `diagramify watch`
 
-Lightweight `.mmd` file watcher — HTTP server + WebSocket hot-reload only. No Express dependency.
+Watch a Mermaid file with the shared viewer and agent API.
+Updates retain user state and handle files saved through an atomic rename.
 
 ```
 diagramify watch <file> [--port <n>] [--theme <t>] [--open] [--outdir <dir>]
@@ -252,10 +274,10 @@ diagramify watch <file> [--port <n>] [--theme <t>] [--open] [--outdir <dir>]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--port <n>` | `3001` | HTTP port |
+| `--port <n>` | `3055` | Local HTTP and WebSocket port |
 | `--theme <t>` | `light` | Diagram theme |
 | `--open` | — | Open browser automatically |
-| `--outdir <dir>` | — | Also write output files on each change |
+| `--outdir <dir>` | Source directory | Write `watch-preview.html` in this directory |
 
 ```bash
 diagramify watch diagram.mmd --open --theme dark
@@ -380,7 +402,7 @@ diagramify init
 ### Environment variables
 
 ```bash
-# LLM providers (set at least one)
+# Optional hosted providers
 export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 export GOOGLE_GENERATIVE_AI_API_KEY=...
@@ -391,6 +413,10 @@ export DIAGRAMIFY_MODEL=gemini-flash-latest
 export DIAGRAMIFY_TIER=best
 export DIAGRAMIFY_THEME=dark
 ```
+
+`DIAGRAMIFY_LOCAL_MODEL` selects an installed Ollama model.
+`DIAGRAMIFY_LOCAL_MODEL_URL` sets its local address.
+Local inference takes priority over hosted credentials. `--no-llm` disables all inference.
 
 `GEMINI_API_KEY` also works in place of `GOOGLE_GENERATIVE_AI_API_KEY`.
 
@@ -421,7 +447,7 @@ export default {
   model: 'gemini-flash-latest',
   theme: 'tokyo-night',
   defaultOutput: ['html', 'svg'],
-  temperature: 0.7,
+  temperature: 0,
   maxTokens: 8192,
 } satisfies DiagramifyConfig;
 ```
@@ -477,6 +503,10 @@ analysis.entryPoints   // main entry files detected
 
 ## React component
 
+The viewer retains its iframe, viewport, filters, and local edits across source updates.
+Use `onChange` to receive graph snapshots. Use `onError` to handle rejected updates.
+See [React embedding](docs/live-editing.md#react-embedding) for details.
+
 ```tsx
 import { DiagramViewer } from 'diagramify-ai/react';
 
@@ -510,9 +540,9 @@ export default function MyPage() {
 
 | Provider | Env var | Default model |
 |----------|---------|---------------|
-| `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o` |
-| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-flash-latest` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` |
 
 > **Google Gemini note:** Diagramify disables thinking output. This keeps the complete output budget for the architecture graph.
 
