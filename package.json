@@ -1,6 +1,6 @@
 {
   "name": "diagramify-ai",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Open-source architecture mapping and rendering engine with interactive HTML, images, PDF, CLI, React, and agent support.",
   "type": "module",
   "main": "./dist/index.js",

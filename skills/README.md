@@ -1,31 +1,18 @@
-# Diagramify Skill
+# Diagramify Agent Skills
 
-The `diagramify` skill teaches coding agents to generate, revise, validate, render, compare, and automate diagrams with Diagramify.
+This directory provides specialized agent skills for Diagramify:
 
-## Install
+| Skill | Purpose | Command |
+| :--- | :--- | :--- |
+| **[`diagramify`](./diagramify/SKILL.md)** | Baseline 2D Mermaid architecture and flow diagrams | `diagramify generate` |
+| **[`spatial-architecture`](./spatial-architecture/SKILL.md)** | Tactile 3D spatial models and interactive digital twins | `diagramify spatial` |
+| **[`statechart-verification`](./statechart-verification/SKILL.md)** | Formal state machines with TLC safety invariants | `diagramify statechart` |
 
-Copy the entire skill directory so its references and agent metadata remain available:
+## Installation
+
+Copy the skills to your local agent skills directory:
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -R skills/diagramify ~/.claude/skills/
-```
-
-For an installed npm package:
-
-```bash
-mkdir -p ~/.claude/skills
-cp -R node_modules/diagramify-ai/skills/diagramify ~/.claude/skills/
-```
-
-## Invoke
-
-Examples:
-
-```text
-Use $diagramify to create and validate an architecture diagram for this repository.
-```
-
-```text
-Use $diagramify to revise diagrams/system.mmd, render interactive HTML and SVG, and explain the material changes.
+cp -R skills/* ~/.claude/skills/
 ```

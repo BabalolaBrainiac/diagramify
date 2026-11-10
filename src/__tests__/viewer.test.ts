@@ -14,11 +14,22 @@ async function viewer(offline = false): Promise<string> {
   return result.html as string;
 }
 
-/** Every URL the page would actually fetch. An XML namespace is not a fetch. */
+/** URLs at actual network sites: fetch targets, request constructors, resource
+ * attributes, CSS url(), and dynamic imports. Specifier URIs that appear as
+ * plain strings (XML namespaces such as w3.org, JSON-Schema $schema draft
+ * identifiers) are labels, not fetches, and do not count. */
 function externalFetches(html: string): string[] {
-  return [...new Set(html.match(/https?:\/\/[^"'\s)]+/g) ?? [])].filter(
-    (url) => !url.includes('www.w3.org'),
-  );
+  const networkSites = [
+    /(?:src|href)\s*=\s*["']?(https?:\/\/[^"'\s<>]+)/g,
+    /fetch\(\s*["'`]?(https?:\/\/[^"'`\s)]+)/g,
+    /new\s+Request\(\s*["'`]?(https?:\/\/[^"'`\s)]+)/g,
+    /url\(\s*["']?(https?:\/\/[^"'`\s)]+)/g,
+    /import\(\s*["'`](https?:\/\/[^"'\s)]+)/g,
+  ];
+  return [...new Set(
+    networkSites
+      .flatMap((regex) => [...html.matchAll(regex)].map((match) => match[1])),
+  )].filter((url) => !url.includes('www.w3.org'));
 }
 
 describe('viewer independence', () => {

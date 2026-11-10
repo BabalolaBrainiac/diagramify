@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-05
+
+### Added
+
+- Dual-engine architecture supporting 3D spatial models (`spatial-3d`) and formal statecharts (`statechart`).
+- Agent skill `spatial-architecture` for multi-tier chassis deconstruction and illuminated data highway routing.
+- Agent skill `statechart-verification` for asynchronous worker event loops and TLC formal safety invariant checking.
+- Brand styling tokens implementing Forge Black (`#0a0a0a`), Construction Orange (`#ff6b00`), and Earlybird Teal (`#16aab9`).
+- Interactive 3D spatial simulation suite with layer peeler controls and animated state machine transitions.
+
 ## [0.4.0] — 2026-09-10
 
 ### Added
