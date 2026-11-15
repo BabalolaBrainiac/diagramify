@@ -69,6 +69,7 @@ export interface PrImpactReport {
 
 export interface RunPrDiffOptions {
   prId?: string;
+  repo?: string;
   repoPath?: string;
   baseRef?: string;
   headRef?: string;
@@ -116,23 +117,61 @@ async function runGit(repoPath: string, args: string[]): Promise<string> {
   return stdout;
 }
 
-async function fetchPrMetadata(repoPath: string, prId: string): Promise<GhPrMetadata> {
+const VALID_REPO_PATTERN = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+
+export function parseGitHubRepoSlug(remoteUrl: string): string | undefined {
+  const trimmed = remoteUrl.trim();
+  const match = trimmed.match(/github\.com[:/]([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+?)(?:\.git)?$/);
+  if (match && VALID_REPO_PATTERN.test(match[1])) {
+    return match[1];
+  }
+  return undefined;
+}
+
+async function resolveGitHubRepo(repoPath: string, explicitRepo?: string): Promise<string | undefined> {
+  if (explicitRepo) {
+    const trimmed = explicitRepo.trim();
+    if (!VALID_REPO_PATTERN.test(trimmed)) {
+      throw new Error(`Invalid repository slug: ${explicitRepo}`);
+    }
+    return trimmed;
+  }
+
+  const envRepo = process.env.GITHUB_REPOSITORY?.trim();
+  if (envRepo && VALID_REPO_PATTERN.test(envRepo)) {
+    return envRepo;
+  }
+
+  try {
+    const originUrl = await runGit(repoPath, ['remote', 'get-url', 'origin']);
+    return parseGitHubRepoSlug(originUrl);
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchPrMetadata(repoPath: string, prId: string, repoSlug?: string): Promise<GhPrMetadata> {
   const safeId = prId.trim().replace(/^#/, '');
   if (!/^\d+$/.test(safeId) && !VALID_REF_PATTERN.test(safeId)) {
     throw new Error(`Invalid pull request identifier: ${prId}`);
   }
-  const { stdout } = await execFileAsync(
-    'gh',
-    ['pr', 'view', safeId, '--json', 'number,title,body,baseRefName,headRefName,baseRefOid,headRefOid,url'],
-    { cwd: repoPath, maxBuffer: 4 * 1024 * 1024 },
-  );
+  const args = [
+    'pr',
+    'view',
+    safeId,
+    ...(repoSlug ? ['--repo', repoSlug] : []),
+    '--json',
+    'number,title,body,baseRefName,headRefName,baseRefOid,headRefOid,url',
+  ];
+  const { stdout } = await execFileAsync('gh', args, { cwd: repoPath, maxBuffer: 4 * 1024 * 1024 });
   return JSON.parse(stdout) as GhPrMetadata;
 }
 
-async function updatePrBody(repoPath: string, prId: string, body: string): Promise<void> {
+async function updatePrBody(repoPath: string, prId: string, body: string, repoSlug?: string): Promise<void> {
   const safeId = prId.trim().replace(/^#/, '');
+  const args = ['pr', 'edit', safeId, ...(repoSlug ? ['--repo', repoSlug] : []), '--body-file', '-'];
   await new Promise<void>((resolvePromise, reject) => {
-    const child = execFile('gh', ['pr', 'edit', safeId, '--body-file', '-'], { cwd: repoPath }, (error) => {
+    const child = execFile('gh', args, { cwd: repoPath }, (error) => {
       if (error) reject(error);
       else resolvePromise();
     });
@@ -344,6 +383,7 @@ function readCandidateSources(rootDir: string, relPaths: string[]): Array<{ path
   const items: Array<{ path: string; content: string }> = [];
   for (const rel of relPaths) {
     if (!/\.(?:mmd|ts|tsx|js|jsx|py|go|cs|java|md)$/i.test(rel)) continue;
+    if (/(?:^|\/)__tests__\/|\.(?:test|spec)\.[^.]+$/i.test(rel)) continue;
     const full = join(rootDir, rel);
     if (!existsSync(full)) continue;
     try {
@@ -593,12 +633,14 @@ export async function runPrDiff(options: RunPrDiffOptions): Promise<PrDiffRunRes
   const maxNodes = options.maxNodes ?? 24;
 
   let prMeta: GhPrMetadata | undefined;
+  let repoSlug: string | undefined;
   let baseRef = options.baseRef;
   let headRef = options.headRef;
 
   if (options.prId) {
     if (!baseRef || !headRef || (options.update && !options.dryRun)) {
-      prMeta = await fetchPrMetadata(repoPath, options.prId);
+      repoSlug = await resolveGitHubRepo(repoPath, options.repo);
+      prMeta = await fetchPrMetadata(repoPath, options.prId, repoSlug);
       baseRef = baseRef || prMeta.baseRefOid || prMeta.baseRefName;
       headRef = headRef || prMeta.headRefOid || prMeta.headRefName;
     }
@@ -625,8 +667,9 @@ export async function runPrDiff(options: RunPrDiffOptions): Promise<PrDiffRunRes
       analyzeCodebase(headSnap.dir),
     ]);
 
-    const baseGraph = analysisToGraph(baseAnalysis, { title: 'Base Architecture' });
-    const headGraph = analysisToGraph(headAnalysis, { title: 'PR Architecture' });
+    const graphTitle = 'Application';
+    const baseGraph = analysisToGraph(baseAnalysis, { title: graphTitle });
+    const headGraph = analysisToGraph(headAnalysis, { title: graphTitle });
     const drift = compareGraphs(baseGraph, headGraph);
 
     const modifiedComponents = mapModifiedComponents(
@@ -720,7 +763,7 @@ export async function runPrDiff(options: RunPrDiffOptions): Promise<PrDiffRunRes
     if (options.update && !options.dryRun && options.prId) {
       const existing = prMeta?.body ?? '';
       const merged = mergePrDescriptionBody(existing, markdown);
-      await updatePrBody(repoPath, options.prId, merged);
+      await updatePrBody(repoPath, options.prId, merged, repoSlug);
       report.updatedPrBody = true;
     }
 

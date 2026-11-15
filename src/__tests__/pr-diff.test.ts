@@ -11,6 +11,7 @@ import {
   extractStateMachinesFromSources,
   mergePrDescriptionBody,
   parseChangedFiles,
+  parseGitHubRepoSlug,
   runPrDiff,
 } from '../core/pr-diff.js';
 
@@ -19,6 +20,16 @@ function git(cwd: string, args: string[]) {
 }
 
 describe('pull request architecture and state-machine diff', () => {
+  it('extracts GitHub owner/repo slugs from HTTPS and SSH remotes', () => {
+    expect(parseGitHubRepoSlug('https://github.com/BabalolaBrainiac/diagramify.git\n')).toBe(
+      'BabalolaBrainiac/diagramify',
+    );
+    expect(parseGitHubRepoSlug('git@github.com:BabalolaBrainiac/diagramify.git')).toBe(
+      'BabalolaBrainiac/diagramify',
+    );
+    expect(parseGitHubRepoSlug('https://gitlab.com/org/repo.git')).toBeUndefined();
+  });
+
   it('parses added, modified, deleted, and renamed files from git diff', () => {
     const output = [
       'A\tsrc/worker.ts',

@@ -21,6 +21,7 @@ export function makePrCommand(): Command {
   return new Command('pr')
     .description('Generate an architecture and state-machine diff for a pull request')
     .argument('[prId]', 'Pull request number (optional when --base and --head are set)')
+    .option('--repo <owner/repo>', 'Target GitHub repository slug (defaults to origin remote)')
     .option('--path <dir>', 'Path to git repository root (default: current directory)')
     .option('--base <ref>', 'Base git ref (branch or commit SHA)')
     .option('--head <ref>', 'Head git ref (branch or commit SHA)')
@@ -43,6 +44,7 @@ export function makePrCommand(): Command {
         const { runPrDiff } = await import('../../core/pr-diff.js');
         const { report, writtenFiles } = await runPrDiff({
           prId,
+          repo: options.repo,
           repoPath: options.path ? resolve(options.path) : process.cwd(),
           baseRef: options.base,
           headRef: options.head,
