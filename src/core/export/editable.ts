@@ -50,13 +50,16 @@ function depthByNode(graph: ArchitectureGraph): Map<string, number> {
   }
 
   const pending = new Map(incoming);
-  while (queue.length > 0) {
-    const id = queue.shift()!;
+  const inQueue = new Set(queue);
+  for (let head = 0; head < queue.length; head += 1) {
+    const id = queue[head];
+    inQueue.delete(id);
     for (const next of outgoing.get(id) ?? []) {
       depth.set(next, Math.max(depth.get(next) ?? 0, (depth.get(id) ?? 0) + 1));
       pending.set(next, (pending.get(next) ?? 1) - 1);
-      if ((pending.get(next) ?? 0) <= 0 && !queue.includes(next)) {
+      if ((pending.get(next) ?? 0) <= 0 && !inQueue.has(next)) {
         queue.push(next);
+        inQueue.add(next);
       }
     }
   }

@@ -335,40 +335,58 @@ export async function collectEvidence(rootPath: string): Promise<Evidence[]> {
     { cwd: rootPath, dot: true, onlyFiles: true, ignore: ignored, deep: 5 },
   );
 
-  for (const name of [...new Set(envFiles)].slice(0, 160)) {
-      const content = await readCapped(join(rootPath, name));
-      if (!content) {
-        continue;
-      }
-      const source = relative(rootPath, join(rootPath, name)) || name;
-      for (const variable of environmentNames(content)) {
-        for (const rule of ENV_NAME_PATTERNS) {
-          if (rule.pattern.test(variable)) {
-            add(rule.service, source, variable);
-          }
+  const uniqueEnvFiles = [...new Set(envFiles)].slice(0, 160);
+  const envContents = await Promise.all(uniqueEnvFiles.map((name) => readCapped(join(rootPath, name))));
+  for (let i = 0; i < uniqueEnvFiles.length; i += 1) {
+    const content = envContents[i];
+    if (!content) continue;
+    const name = uniqueEnvFiles[i];
+    const source = relative(rootPath, join(rootPath, name)) || name;
+    for (const variable of environmentNames(content)) {
+      for (const rule of ENV_NAME_PATTERNS) {
+        if (rule.pattern.test(variable)) {
+          add(rule.service, source, variable);
         }
       }
+    }
   }
 
   // 2. Platform descriptors, including descriptors inside service folders.
-  for (const rule of INFRA_RULES) {
-    const matches = await glob(
-      rule.files.flatMap((name) => [name, `**/${name}`]),
-      { cwd: rootPath, dot: true, ignore: ignored, deep: 5, onlyFiles: false },
-    );
-    for (const name of [...new Set(matches)].slice(0, 160)) {
-      const path = join(rootPath, name);
-      add(rule.service, name, name.split('/').pop() ?? name);
+  const infraRuleMatches = await Promise.all(
+    INFRA_RULES.map(async (rule) => {
+      const matches = await glob(
+        rule.files.flatMap((name) => [name, `**/${name}`]),
+        { cwd: rootPath, dot: true, ignore: ignored, deep: 5, onlyFiles: false },
+      );
+      return { rule, names: [...new Set(matches)].slice(0, 160) };
+    }),
+  );
 
-      const content = await readCapped(path);
-      if (content && rule.content) {
+  const readCache = new Map<string, Promise<string | null>>();
+  const readCappedCached = (fullPath: string): Promise<string | null> => {
+    let pending = readCache.get(fullPath);
+    if (!pending) {
+      pending = readCapped(fullPath);
+      readCache.set(fullPath, pending);
+    }
+    return pending;
+  };
+
+  for (const { rule, names } of infraRuleMatches) {
+    const contents = await Promise.all(names.map((name) => readCappedCached(join(rootPath, name))));
+    for (let i = 0; i < names.length; i += 1) {
+      const name = names[i];
+      add(rule.service, name, name.split('/').pop() ?? name);
+      const content = contents[i];
+      if (!content) continue;
+      if (rule.content) {
         for (const inner of rule.content) {
           if (inner.pattern.test(content)) {
             add(inner.service, name, inner.pattern.source);
           }
         }
       }
-      if (content && /Dockerfile|Containerfile/i.test(name)) {
+      if (/Dockerfile|Containerfile/i.test(name)) {
         for (const image of IMAGE_PATTERNS) {
           if (image.pattern.test(content)) {
             add(image.service, name, 'base image');
@@ -391,8 +409,11 @@ export async function collectEvidence(rootPath: string): Promise<Evidence[]> {
     ],
     { cwd: rootPath, dot: true, onlyFiles: true, ignore: ignored, deep: 7 },
   );
-  for (const name of infraFiles.slice(0, 300)) {
-    const content = await readCapped(join(rootPath, name));
+  const slicedInfra = infraFiles.slice(0, 300);
+  const infraContents = await Promise.all(slicedInfra.map((name) => readCappedCached(join(rootPath, name))));
+  for (let i = 0; i < slicedInfra.length; i += 1) {
+    const name = slicedInfra[i];
+    const content = infraContents[i];
     if (!content) {
       continue;
     }

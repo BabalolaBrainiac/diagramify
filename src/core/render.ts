@@ -1,7 +1,6 @@
 import sharp from 'sharp';
 import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
 import { needsHierarchicalFlowchartLayout, renderHierarchicalFlowchartSVG } from './flowchart-layout.js';
-import { generateInteractiveHTML } from './html.js';
 import { styleSVG } from './styling/renderer.js';
 import { flattenSVGColors } from './styling/flatten.js';
 import { fitSubgraphBoxes } from './styling/subgraph-fit.js';
@@ -122,7 +121,9 @@ function renderSVG(
 ): string {
   try {
     let svg = rawSVG;
-    svg = applyThemeVars(svg, theme, darkMode);
+    if (!svg.includes('--bg:')) {
+      svg = applyThemeVars(svg, theme, darkMode);
+    }
 
     const diagramTheme = getTheme(theme, darkMode ? 'dark' : 'light');
     svg = styleSVG(svg, diagramTheme);
@@ -145,38 +146,81 @@ function renderSVG(
   }
 }
 
-function createRasterPipeline(svgString: string, width?: number) {
+const LIBRSVG_MAX_DIMENSION = 32767;
+
+function clampSvgRootDimensions(svgString: string, maxWidth: number, maxHeight: number): string {
+  return svgString.replace(/<svg\b([^>]*)>/, (fullTag, attrs: string) => {
+    const updatedAttrs = attrs
+      .replace(/\swidth="[^"]*"/, ` width="${maxWidth}"`)
+      .replace(/\sheight="[^"]*"/, ` height="${maxHeight}"`);
+    return updatedAttrs === attrs ? fullTag : `<svg${updatedAttrs}>`;
+  });
+}
+
+function createRasterPipeline(svgInput: string | Buffer, width?: number, extent?: { width: number; height: number }) {
+  const { width: svgWidth, height: svgHeight } = extent ?? readExtent(typeof svgInput === 'string' ? svgInput : svgInput.toString('utf8'));
+  const exceedsRsvg = svgWidth > LIBRSVG_MAX_DIMENSION || svgHeight > LIBRSVG_MAX_DIMENSION;
+
   if (width !== undefined) {
-    return sharp(Buffer.from(svgString)).resize(width, undefined, {
-      withoutEnlargement: true,
-    });
+    if (!exceedsRsvg) {
+      return sharp(typeof svgInput === 'string' ? Buffer.from(svgInput) : svgInput).resize(width, undefined, {
+        withoutEnlargement: true,
+      });
+    }
+    const safeScale = Math.min(
+      (LIBRSVG_MAX_DIMENSION - 1) / Math.max(1, svgWidth),
+      (LIBRSVG_MAX_DIMENSION - 1) / Math.max(1, svgHeight),
+    );
+    const safeSvg = clampSvgRootDimensions(
+      typeof svgInput === 'string' ? svgInput : svgInput.toString('utf8'),
+      Math.max(1, Math.floor(svgWidth * safeScale)),
+      Math.max(1, Math.floor(svgHeight * safeScale)),
+    );
+    return sharp(Buffer.from(safeSvg)).resize(width, undefined, { withoutEnlargement: true });
   }
 
-  const { width: svgWidth, height: svgHeight } = readExtent(svgString);
   const capScale = Math.min(
     4800 / Math.max(1, svgWidth),
     4800 / Math.max(1, svgHeight),
     Math.sqrt(16_000_000 / Math.max(1, svgWidth * svgHeight)),
   );
+
+  if (exceedsRsvg || capScale < 1) {
+    const downScale = Math.min(
+      1,
+      capScale,
+      (LIBRSVG_MAX_DIMENSION - 1) / Math.max(1, svgWidth),
+      (LIBRSVG_MAX_DIMENSION - 1) / Math.max(1, svgHeight),
+    );
+    const targetW = Math.max(1, Math.round(svgWidth * downScale));
+    const targetH = Math.max(1, Math.round(svgHeight * downScale));
+    const safeSvg = clampSvgRootDimensions(
+      typeof svgInput === 'string' ? svgInput : svgInput.toString('utf8'),
+      targetW,
+      targetH,
+    );
+    return sharp(Buffer.from(safeSvg), { density: 72 });
+  }
+
   const scale = Math.max(1, Math.min(2, capScale));
   const density = Math.round(72 * scale);
-  return sharp(Buffer.from(svgString), { density });
+  return sharp(typeof svgInput === 'string' ? Buffer.from(svgInput) : svgInput, { density });
 }
 
 async function rasterize(
   svgString: string,
   format: 'png' | 'jpeg',
-  options: { width?: number; quality?: number; background?: string } = {},
+  options: { width?: number; quality?: number; background?: string; svgBuffer?: Buffer; extent?: { width: number; height: number } } = {},
 ): Promise<Buffer> {
   const quality = options.quality ?? 90;
-  const pipeline = createRasterPipeline(svgString, options.width);
+  const pipeline = createRasterPipeline(options.svgBuffer ?? svgString, options.width, options.extent);
 
   if (format === 'jpeg') {
     // JPEG holds no alpha channel. Flatten so a gap cannot turn black.
     return pipeline.flatten({ background: options.background ?? '#ffffff' }).jpeg({ quality }).toBuffer();
   }
 
-  return pipeline.png().toBuffer();
+  return pipeline.png({ compressionLevel: 6, effort: 4 }).toBuffer();
 }
 
 export async function renderDiagram(
@@ -203,19 +247,23 @@ export async function renderDiagram(
     formats.includes('pdf');
   const needsGraph =
     formats.includes('drawio') || formats.includes('excalidraw') || formats.includes('json');
+  const needsParsedGraph = needsSVG || needsGraph;
 
   let layoutSVG: string | undefined;
+  let parsedGraph: ArchitectureGraph | undefined = options.graph;
 
   // Which nodes belong to which tier. The subgraph fitter needs this, and the
   // Mermaid source already states it.
   const membership = new Map<string, string[]>();
-  try {
-    const parsed = options.graph ?? mermaidToGraph(mermaidSource, options.title);
-    for (const group of parsed.groups) {
-      membership.set(group.id, group.nodeIds);
+  if (needsParsedGraph) {
+    try {
+      parsedGraph = options.graph ?? mermaidToGraph(mermaidSource, options.title);
+      for (const group of parsedGraph.groups) {
+        membership.set(group.id, group.nodeIds);
+      }
+    } catch {
+      // A source the parser cannot read still renders. It just skips the fitting.
     }
-  } catch {
-    // A source the parser cannot read still renders. It just skips the fitting.
   }
 
   if (needsSVG || needsGraph) {
@@ -228,7 +276,9 @@ export async function renderDiagram(
 
       if (formats.includes('html')) {
         try {
-          const html = generateInteractiveHTML(baseSVG, mermaidSource, options);
+          const { generateInteractiveHTML } = await import('./html.js');
+          const htmlOptions = parsedGraph && !options.graph ? { ...options, graph: parsedGraph } : options;
+          const html = generateInteractiveHTML(baseSVG, mermaidSource, htmlOptions);
           result.html = html;
         } catch (error) {
           throw new Error(`HTML generation failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
@@ -240,7 +290,7 @@ export async function renderDiagram(
       const wantsSVGFile = formats.some((f) => f === 'svg' || f === 'png' || f === 'jpeg' || f === 'pdf');
       if (wantsSVGFile || needsGraph) {
         layoutSVG = renderSVG(
-          rawSVG,
+          baseSVG,
           options.theme,
           options.darkMode ?? false,
           options.backgroundColor,
@@ -255,30 +305,39 @@ export async function renderDiagram(
     }
   }
 
-  if (formats.includes('png') && result.svg) {
-    try {
-      result.png = await rasterize(result.svg, 'png', {
-        width: options.width,
-        background: rasterBackground,
-      });
-    } catch (error) {
-      throw new Error(`PNG rasterization failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
-    }
-  }
-
-  if (formats.includes('jpeg') && result.svg) {
-    try {
-      result.jpeg = await rasterize(result.svg, 'jpeg', {
-        width: options.width,
-        quality: options.quality,
-        background: rasterBackground,
-      });
-    } catch (error) {
-      throw new Error(
-        `JPEG rasterization failed: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
-    }
+  const wantsPng = formats.includes('png') && Boolean(result.svg);
+  const wantsJpeg = formats.includes('jpeg') && Boolean(result.svg);
+  if ((wantsPng || wantsJpeg) && result.svg) {
+    const svgBuffer = Buffer.from(result.svg);
+    const extent = readExtent(result.svg);
+    const [pngBuffer, jpegBuffer] = await Promise.all([
+      wantsPng
+        ? rasterize(result.svg, 'png', {
+            width: options.width,
+            background: rasterBackground,
+            svgBuffer,
+            extent,
+          }).catch((error) => {
+            throw new Error(`PNG rasterization failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+          })
+        : undefined,
+      wantsJpeg
+        ? rasterize(result.svg, 'jpeg', {
+            width: options.width,
+            quality: options.quality,
+            background: rasterBackground,
+            svgBuffer,
+            extent,
+          }).catch((error) => {
+            throw new Error(
+              `JPEG rasterization failed: ${error instanceof Error ? error.message : String(error)}`,
+              { cause: error },
+            );
+          })
+        : undefined,
+    ]);
+    if (pngBuffer) result.png = pngBuffer;
+    if (jpegBuffer) result.jpeg = jpegBuffer;
   }
 
   if (formats.includes('pdf')) {
@@ -298,7 +357,7 @@ export async function renderDiagram(
   if (needsGraph) {
     // The graph carries geometry when a render already produced an SVG, so an
     // editable export keeps the layout the reader saw.
-    let graph: ArchitectureGraph = options.graph ?? mermaidToGraph(mermaidSource, options.title);
+    let graph: ArchitectureGraph = parsedGraph ?? mermaidToGraph(mermaidSource, options.title);
     if (layoutSVG) {
       graph = attachLayout(graph, layoutSVG, Boolean(options.graph));
     }

@@ -1,9 +1,6 @@
 import { Command } from 'commander';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { parseMermaidSource } from '../../core/parse.js';
-import { computeDiff, generateDiffHTML, generateDiffMermaid } from '../../core/diff.js';
-import { renderDiagram } from '../../core/render.js';
 
 export function makeDiffCommand(): Command {
   return new Command('diff')
@@ -15,6 +12,11 @@ export function makeDiffCommand(): Command {
     .option('--name <name>', 'Output file base name', 'diff')
     .option('--theme <theme>', 'Theme name', 'light')
     .action(async (beforePath, afterPath, options) => {
+      const [{ parseMermaidSource }, { computeDiff, generateDiffHTML, generateDiffMermaid }, { renderDiagram }] = await Promise.all([
+        import('../../core/parse.js'),
+        import('../../core/diff.js'),
+        import('../../core/render.js'),
+      ]);
       console.log(`Comparing ${beforePath} and ${afterPath}...`);
       
       const beforeSrc = await readFile(beforePath, 'utf8');

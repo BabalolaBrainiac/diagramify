@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import { writeFileSync, mkdirSync } from 'fs';
 import { basename as pathBasename, join, resolve } from 'path';
-import { generateDiagram, prepareArchitecture } from '../../core/generate.js';
 import type { GenerateOptions, OutputFormat, DiagramType } from '../../core/types.js';
 
 const VALID_OUTPUT_FORMATS = new Set<OutputFormat>([
@@ -92,6 +91,8 @@ export const generateCommand = new Command()
           direction: options.direction as any,
         },
       };
+
+      const { generateDiagram, prepareArchitecture } = await import('../../core/generate.js');
 
       if (options.prepare) {
         console.log(JSON.stringify(await prepareArchitecture(generateOptions), null, 2));

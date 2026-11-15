@@ -68,10 +68,24 @@ function fitGroup(element: Card) {
   const members = element.containedNodes ?? [];
   if (!members.length) { element.style.display = 'none'; return; }
   if (!element.dataset.dfyHidden && !element.dataset.layerHidden) element.style.display = '';
-  const left = Math.min(...members.map(card => Number(card.dataset.cx) - card.offsetWidth / 2)) - 24;
-  const top = Math.min(...members.map(card => Number(card.dataset.cy) - card.offsetHeight / 2)) - 40;
-  const right = Math.max(...members.map(card => Number(card.dataset.cx) + card.offsetWidth / 2)) + 24;
-  const bottom = Math.max(...members.map(card => Number(card.dataset.cy) + card.offsetHeight / 2)) + 24;
+  let minLeft = Infinity;
+  let minTop = Infinity;
+  let maxRight = -Infinity;
+  let maxBottom = -Infinity;
+  for (const card of members) {
+    const cx = Number(card.dataset.cx);
+    const cy = Number(card.dataset.cy);
+    const halfW = card.offsetWidth / 2;
+    const halfH = card.offsetHeight / 2;
+    if (cx - halfW < minLeft) minLeft = cx - halfW;
+    if (cy - halfH < minTop) minTop = cy - halfH;
+    if (cx + halfW > maxRight) maxRight = cx + halfW;
+    if (cy + halfH > maxBottom) maxBottom = cy + halfH;
+  }
+  const left = minLeft - 24;
+  const top = minTop - 40;
+  const right = maxRight + 24;
+  const bottom = maxBottom + 24;
   Object.assign(element.style, { left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` });
 }
 
@@ -107,11 +121,21 @@ function syncCards(hooks: EditorHooks, graph: ArchitectureGraph) {
 
 function withInitialLayout(hooks: EditorHooks): ArchitectureGraph {
   const graph = structuredClone(hooks.initial);
+  const measured: Array<{ node: ArchitectureGraph['nodes'][number]; card: Card; width: number; height: number; cx: number; cy: number }> = [];
   for (const node of graph.nodes) {
     const card = hooks.cards[node.id];
     if (!card || node.layout) continue;
-    node.layout = { x: Number(card.dataset.cx) - card.offsetWidth / 2, y: Number(card.dataset.cy) - card.offsetHeight / 2,
-      width: card.offsetWidth, height: card.offsetHeight };
+    measured.push({
+      node,
+      card,
+      width: card.offsetWidth,
+      height: card.offsetHeight,
+      cx: Number(card.dataset.cx),
+      cy: Number(card.dataset.cy),
+    });
+  }
+  for (const item of measured) {
+    item.node.layout = { x: item.cx - item.width / 2, y: item.cy - item.height / 2, width: item.width, height: item.height };
   }
   return graph;
 }

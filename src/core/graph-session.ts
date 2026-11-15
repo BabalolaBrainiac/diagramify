@@ -1,21 +1,12 @@
-import { z } from 'zod';
-import { graphDocumentSchema, readGraphDocument } from './graph-document.js';
-import type { ArchitectureGraph, IREdge } from './ir.js';
+import type { ArchitectureGraph, IREdge } from './ir-types.js';
+import {
+  parseGraphOperationsFast,
+  validateGraphDocumentFast,
+  type GraphOperation,
+  type ParsedGraphOperation,
+} from './graph-validate.js';
 
-const fields = graphDocumentSchema.shape;
-const id = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
-export const graphOperationSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('node.add'), node: fields.nodes.element }),
-  z.object({ type: z.literal('node.update'), id, changes: fields.nodes.element.omit({ id: true }).partial() }),
-  z.object({ type: z.literal('node.remove'), id }),
-  z.object({ type: z.literal('edge.add'), edge: fields.edges.element }),
-  z.object({ type: z.literal('edge.update'), id, changes: fields.edges.element.omit({ id: true }).partial() }),
-  z.object({ type: z.literal('edge.remove'), id }),
-  z.object({ type: z.literal('group.add'), group: fields.groups.removeDefault().element }),
-  z.object({ type: z.literal('group.update'), id, label: z.string().min(1) }),
-  z.object({ type: z.literal('group.remove'), id }),
-]);
-export type GraphOperation = z.input<typeof graphOperationSchema>;
+export type { GraphOperation };
 export interface GraphSnapshot { revision: number; graph: ArchitectureGraph }
 
 export class GraphConflictError extends Error {
@@ -31,7 +22,7 @@ function edgeSignature(edge: IREdge): string {
 
 /** Assigns identifiers once so connections survive editing and undo. */
 export function identifyGraph(value: unknown): ArchitectureGraph {
-  const graph = readGraphDocument(value);
+  const graph = validateGraphDocumentFast(value);
   const used = new Set(graph.edges.flatMap(edge => edge.id ? [edge.id] : []));
   for (const edge of graph.edges) {
     if (edge.id) continue;
@@ -57,7 +48,7 @@ function updateMembership(graph: ArchitectureGraph, nodeId: string, groupId?: st
   if (groupId) find(graph.groups, groupId).nodeIds.push(nodeId);
 }
 
-function applyOperation(graph: ArchitectureGraph, operation: z.output<typeof graphOperationSchema>) {
+function applyOperation(graph: ArchitectureGraph, operation: ParsedGraphOperation) {
   switch (operation.type) {
     case 'node.add':
       if (graph.nodes.some(node => node.id === operation.node.id)) throw new Error('The node identifier already exists.');
@@ -109,7 +100,7 @@ function applyOperation(graph: ArchitectureGraph, operation: z.output<typeof gra
 
 export function applyGraphOperations(value: unknown, operations: unknown): ArchitectureGraph {
   const graph = identifyGraph(value);
-  const parsed = z.array(graphOperationSchema).max(10000).parse(operations);
+  const parsed = parseGraphOperationsFast(operations);
   for (const operation of parsed) applyOperation(graph, operation);
   return identifyGraph(graph);
 }

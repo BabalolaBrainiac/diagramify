@@ -72,8 +72,15 @@ function parseHex(value: string | undefined): Rgb | null {
   return null;
 }
 
+const ATTR_PATTERNS = new Map<string, RegExp>();
+
 function attribute(tag: string, name: string): string | undefined {
-  const match = tag.match(new RegExp(`\\s${name}="([^"]*)"`));
+  let pattern = ATTR_PATTERNS.get(name);
+  if (!pattern) {
+    pattern = new RegExp(`\\s${name}="([^"]*)"`);
+    ATTR_PATTERNS.set(name, pattern);
+  }
+  const match = tag.match(pattern);
   return match ? match[1] : undefined;
 }
 
@@ -610,7 +617,8 @@ function svgToContent(svg: string, height: number): string {
  * needed. A very large diagram is scaled down to the format's page limit.
  */
 export function svgToPDF(svg: string, options: PdfOptions = {}): Buffer {
-  const flattened = flattenSVGColors(svg);
+  const needsFlatten = svg.includes('var(') || svg.includes('color-mix(');
+  const flattened = needsFlatten ? flattenSVGColors(svg) : svg;
 
   const viewBox = flattened.match(/viewBox="([-\d.eE+\s]+)"/);
   let minX = 0;
@@ -688,22 +696,25 @@ function assemblePDF(content: string, width: number, height: number, title?: str
     : '<< /Producer (Diagramify) /Creator (Diagramify) >>';
   objects.push(info);
 
-  let pdf = '%PDF-1.4\n%\xE2\xE3\xCF\xD3\n';
+  const chunks: string[] = ['%PDF-1.4\n%\xE2\xE3\xCF\xD3\n'];
+  let byteOffset = Buffer.byteLength(chunks[0], 'latin1');
   const offsets: number[] = [];
 
-  objects.forEach((object, index) => {
-    offsets.push(Buffer.byteLength(pdf, 'latin1'));
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-
-  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
-  pdf += `xref\n0 ${objects.length + 1}\n`;
-  pdf += '0000000000 65535 f \n';
-  for (const offset of offsets) {
-    pdf += `${offset.toString().padStart(10, '0')} 00000 n \n`;
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(byteOffset);
+    const entry = `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+    chunks.push(entry);
+    byteOffset += Buffer.byteLength(entry, 'latin1');
   }
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${objects.length} 0 R >>\n`;
-  pdf += `startxref\n${xrefOffset}\n%%EOF\n`;
 
-  return Buffer.from(pdf, 'latin1');
+  const xrefOffset = byteOffset;
+  chunks.push(`xref\n0 ${objects.length + 1}\n`);
+  chunks.push('0000000000 65535 f \n');
+  for (const offset of offsets) {
+    chunks.push(`${offset.toString().padStart(10, '0')} 00000 n \n`);
+  }
+  chunks.push(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${objects.length} 0 R >>\n`);
+  chunks.push(`startxref\n${xrefOffset}\n%%EOF\n`);
+
+  return Buffer.from(chunks.join(''), 'latin1');
 }

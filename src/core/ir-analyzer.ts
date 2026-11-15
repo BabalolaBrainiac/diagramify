@@ -193,6 +193,28 @@ export function analysisToGraph(
   const coreNodes: IRNode[] = [];
   const moduleIdByName = new Map<string, string>();
 
+  const evidenceByComponent = new Map<string, Array<{ source: string; hint: string }>>();
+  for (const item of analysis.componentSources ?? []) {
+    let bucket = evidenceByComponent.get(item.component);
+    if (!bucket) {
+      bucket = [];
+      evidenceByComponent.set(item.component, bucket);
+    }
+    bucket.push({ source: item.source, hint: item.component });
+  }
+
+  const evidenceByService = new Map<string, Array<{ source: string; hint: string }>>();
+  for (const item of analysis.evidence ?? []) {
+    const def = getServiceDefinition(item.service);
+    const key = lookupKey(def.name === 'Service' ? item.service : def.name);
+    let bucket = evidenceByService.get(key);
+    if (!bucket) {
+      bucket = [];
+      evidenceByService.set(key, bucket);
+    }
+    bucket.push({ source: item.source, hint: item.hint });
+  }
+
   const modules = dedupe(analysis.serviceDirectories ?? []);
   if (modules.length > 0) {
     for (const moduleName of modules) {
@@ -213,8 +235,7 @@ export function analysisToGraph(
         serviceType: 'compute',
         description: `Internal module detected at ${moduleName}.`,
         status: 'observed',
-        evidence: (analysis.componentSources ?? []).filter(item => item.component === moduleName)
-          .map(item => ({ source: item.source, hint: moduleName })),
+        evidence: evidenceByComponent.get(moduleName) ?? [],
       };
       coreNodes.push(node);
       addNode(node, { id: 'backend', label: 'Backend Services' });
@@ -287,9 +308,7 @@ export function analysisToGraph(
         ? `Version ${dependencyByName.get(serviceName.toLowerCase())!.version}.`
         : undefined,
       status: 'observed',
-      evidence: (analysis.evidence ?? [])
-        .filter(item => lookupKey(getServiceDefinition(item.service).name === 'Service' ? item.service : getServiceDefinition(item.service).name) === lookupKey(candidate.label))
-        .map(item => ({ source: item.source, hint: item.hint })),
+      evidence: evidenceByService.get(lookupKey(candidate.label)) ?? [],
     };
     addNode(node, tier);
     serviceIdByName.set(lookupKey(serviceName), node.id);

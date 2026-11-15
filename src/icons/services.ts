@@ -825,31 +825,31 @@ const serviceRegistry: Record<string, ServiceDefinition> = {
   },
 };
 
+const serviceLookupIndex = (() => {
+  const index = new Map<string, ServiceDefinition>();
+  for (const [key, service] of Object.entries(serviceRegistry)) {
+    const keySlug = serviceLookupKey(key);
+    if (!index.has(keySlug)) index.set(keySlug, service);
+    const nameSlug = serviceLookupKey(service.name);
+    if (!index.has(nameSlug)) index.set(nameSlug, service);
+    for (const alias of service.aliases) {
+      const aliasSlug = serviceLookupKey(alias);
+      if (!index.has(aliasSlug)) index.set(aliasSlug, service);
+    }
+  }
+  return index;
+})();
+
 /**
- * Get service definition by name or alias
+ * Look up a service definition by name or alias
  */
 export function getServiceDefinition(name: string): ServiceDefinition {
   const normalized = name.toLowerCase().trim();
-  const lookup = serviceLookupKey(name);
-
-  // Direct lookup
   if (serviceRegistry[normalized]) {
     return serviceRegistry[normalized];
   }
 
-  // Alias lookup
-  for (const [key, service] of Object.entries(serviceRegistry)) {
-    if (
-      serviceLookupKey(key) === lookup ||
-      serviceLookupKey(service.name) === lookup ||
-      service.aliases.some((alias) => serviceLookupKey(alias) === lookup)
-    ) {
-      return service;
-    }
-  }
-
-  // Fallback to generic service
-  return serviceRegistry.service;
+  return serviceLookupIndex.get(serviceLookupKey(name)) ?? serviceRegistry.service;
 }
 
 export interface ServiceClassification {

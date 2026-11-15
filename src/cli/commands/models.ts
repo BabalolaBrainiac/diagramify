@@ -1,15 +1,5 @@
 import { Command } from 'commander';
-import { loadConfig } from '../../core/config.js';
-import {
-  API_KEY_VARIABLES,
-  PROVIDERS,
-  availableProviders,
-  clearModelCache,
-  discoverModels,
-  pickModel,
-  resolveModelId,
-  type ModelTier,
-} from '../../core/models.js';
+import type { ModelTier } from '../../core/models.js';
 import type { ProviderName } from '../../core/types.js';
 
 const TIERS: ModelTier[] = ['fast', 'balanced', 'best'];
@@ -28,6 +18,13 @@ export const modelsCommand = new Command()
   .option('--refresh', 'Ignore the cached model list and ask the provider again')
   .action(async (options) => {
     try {
+      const [
+        { loadConfig },
+        { API_KEY_VARIABLES, PROVIDERS, availableProviders, clearModelCache, discoverModels, pickModel, resolveModelId },
+      ] = await Promise.all([
+        import('../../core/config.js'),
+        import('../../core/models.js'),
+      ]);
       if (options.refresh) {
         clearModelCache();
         console.log('Cleared the cached model list.');

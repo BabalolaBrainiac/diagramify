@@ -1,12 +1,6 @@
 import { Command } from 'commander';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { dirname, resolve } from 'path';
-import { analyzeCodebase } from '../../core/analyze.js';
-import { analysisToGraph } from '../../core/ir-analyzer.js';
-import { generateGraph } from '../../core/generate.js';
-import { deserializeGraph, serializeGraph } from '../../core/ir.js';
-import { compareGraphs, formatDriftReport } from '../../core/drift.js';
-import { basename } from 'path';
+import { dirname, resolve, basename } from 'path';
 
 /**
  * Fails a pull request when the committed diagram no longer matches the code.
@@ -28,8 +22,20 @@ export const checkCommand = new Command()
       const codebasePath = options.path ? resolve(options.path) : process.cwd();
       const baselinePath = resolve(options.baseline);
 
+      const [
+        { analyzeCodebase },
+        { analysisToGraph },
+        { deserializeGraph, serializeGraph },
+        { compareGraphs, formatDriftReport },
+      ] = await Promise.all([
+        import('../../core/analyze.js'),
+        import('../../core/ir-analyzer.js'),
+        import('../../core/ir.js'),
+        import('../../core/drift.js'),
+      ]);
+
       const current = options.llm
-        ? (await generateGraph({ input: 'codebase', path: codebasePath })).graph
+        ? (await (await import('../../core/generate.js')).generateGraph({ input: 'codebase', path: codebasePath })).graph
         : analysisToGraph(await analyzeCodebase(codebasePath), {
             title: basename(codebasePath),
           });
