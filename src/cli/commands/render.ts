@@ -43,7 +43,7 @@ export const renderCommand = new Command()
   .option('--name <name>', 'Output filename (default: diagram)')
   .option('--theme <theme>', 'Diagram theme name')
   .option('--dark', 'Use dark mode theme')
-  .option('--width <px>', 'Output width in pixels (default: 1200)', '1200')
+  .option('--width <px>', 'Output width in pixels (default: auto high-DPI scale)')
   .option('--quality <1-100>', 'JPEG quality (default: 90)', '90')
   .option('--background <color>', 'Background color, or "transparent" to keep the alpha channel')
   .option('--offline', 'Make the HTML viewer self-contained, with no network request')
@@ -70,7 +70,7 @@ export const renderCommand = new Command()
 
       const renderOptions: RenderOptions = {
         theme: options.theme,
-        width: parseInt(options.width, 10),
+        width: options.width !== undefined ? parseInt(options.width, 10) : undefined,
         quality: parseInt(options.quality, 10),
         darkMode: options.dark ?? false,
         backgroundColor: options.background,

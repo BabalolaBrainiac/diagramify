@@ -32,11 +32,45 @@ const SHAPE_MAP: Record<string, ParsedNode['shape']> = {
   circle: 'circle', doublecircle: 'circle', cylinder: 'cylinder', hexagon: 'hexagon', subroutine: 'stadium',
 };
 
+export interface InvisibleLink {
+  from: string;
+  to: string;
+}
+
 const STRUCTURAL_LINE = /^(flowchart|graph|subgraph|end|classDef|class|click|style|linkStyle|%%)/i;
+const INVISIBLE_LINK_LINE = /^([\w-]+)(?:\s+~{3,}(?:\|[^|]*\|)?\s+([\w-]+))+$/;
+
+/**
+ * Extracts Mermaid invisible ordering links (`A ~~~ B`) and returns cleaned source.
+ * beautiful-mermaid treats the left operand of `~~~` as a standalone bare node, which
+ * creates phantom nodes when ordering subgraphs like `ARCH ~~~ SM`.
+ */
+export function extractInvisibleLinks(source: string): {
+  cleanedSource: string;
+  invisibleLinks: InvisibleLink[];
+} {
+  const invisibleLinks: InvisibleLink[] = [];
+  const keptLines: string[] = [];
+
+  for (const rawLine of source.split('\n')) {
+    const trimmed = rawLine.trim();
+    if (trimmed && !trimmed.startsWith('%%') && INVISIBLE_LINK_LINE.test(trimmed)) {
+      const parts = trimmed.split(/\s+~{3,}(?:\|[^|]*\|)?\s+/).map((part) => part.trim()).filter(Boolean);
+      for (let i = 0; i + 1 < parts.length; i++) {
+        invisibleLinks.push({ from: parts[i], to: parts[i + 1] });
+      }
+      continue;
+    }
+    keptLines.push(rawLine);
+  }
+
+  return { cleanedSource: keptLines.join('\n'), invisibleLinks };
+}
 
 /** Uses the renderer parser so editing and drawing share the same connections. */
 export function parseMermaidSource(source: string): ParsedGraph {
-  const parsed = parseMermaid(source);
+  const { cleanedSource } = extractInvisibleLinks(source);
+  const parsed = parseMermaid(cleanedSource);
   const subgraphs: ParsedSubgraph[] = [];
   function visit(groups: typeof parsed.subgraphs) {
     for (const group of groups) {

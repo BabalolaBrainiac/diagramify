@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { renderMermaidSVG, THEMES } from 'beautiful-mermaid';
+import { needsHierarchicalFlowchartLayout, renderHierarchicalFlowchartSVG } from './flowchart-layout.js';
 import { generateInteractiveHTML } from './html.js';
 import { styleSVG } from './styling/renderer.js';
 import { flattenSVGColors } from './styling/flatten.js';
@@ -7,7 +8,7 @@ import { fitSubgraphBoxes } from './styling/subgraph-fit.js';
 import { svgToPDF } from './export/pdf.js';
 import { graphToDrawio, graphToExcalidraw } from './export/editable.js';
 import { graphToMermaid, mermaidToGraph } from './ir-mermaid.js';
-import { attachLayout } from './ir-layout.js';
+import { attachLayout, readExtent } from './ir-layout.js';
 import { type ArchitectureGraph } from './ir.js';
 import { readGraphDocument, serializeGraphDocument } from './graph-document.js';
 import { getTheme } from './styling/themes.js';
@@ -144,17 +145,31 @@ function renderSVG(
   }
 }
 
+function createRasterPipeline(svgString: string, width?: number) {
+  if (width !== undefined) {
+    return sharp(Buffer.from(svgString)).resize(width, undefined, {
+      withoutEnlargement: true,
+    });
+  }
+
+  const { width: svgWidth, height: svgHeight } = readExtent(svgString);
+  const capScale = Math.min(
+    4800 / Math.max(1, svgWidth),
+    4800 / Math.max(1, svgHeight),
+    Math.sqrt(16_000_000 / Math.max(1, svgWidth * svgHeight)),
+  );
+  const scale = Math.max(1, Math.min(2, capScale));
+  const density = Math.round(72 * scale);
+  return sharp(Buffer.from(svgString), { density });
+}
+
 async function rasterize(
   svgString: string,
   format: 'png' | 'jpeg',
   options: { width?: number; quality?: number; background?: string } = {},
 ): Promise<Buffer> {
-  const width = options.width ?? 1200;
   const quality = options.quality ?? 90;
-
-  const pipeline = sharp(Buffer.from(svgString)).resize(width, undefined, {
-    withoutEnlargement: true,
-  });
+  const pipeline = createRasterPipeline(svgString, options.width);
 
   if (format === 'jpeg') {
     // JPEG holds no alpha channel. Flatten so a gap cannot turn black.
@@ -206,7 +221,9 @@ export async function renderDiagram(
   if (needsSVG || needsGraph) {
     try {
       const themeConfig = options.theme && options.theme in THEMES ? THEMES[options.theme as keyof typeof THEMES] : undefined;
-      const rawSVG = renderMermaidSVG(mermaidSource, themeConfig);
+      const rawSVG = needsHierarchicalFlowchartLayout(mermaidSource)
+        ? renderHierarchicalFlowchartSVG(mermaidSource, themeConfig)
+        : renderMermaidSVG(mermaidSource, themeConfig);
       const baseSVG = applyThemeVars(rawSVG, options.theme, options.darkMode ?? false);
 
       if (formats.includes('html')) {

@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-11-15
+
+### Fixed
+
+- Route cross-subgraph flowchart edges through their lowest common ancestor container with `FIXED_SIDE` ports so edges stay inside subgraph bounds.
+- Parse invisible `~~~` ordering links without creating phantom subgraph nodes, keeping top-level `TB` subgraphs stacked vertically.
+- Place edge labels on clear orthogonal segments away from node boxes, subgraph headers, subgraph borders, and adjacent labels.
+- Normalize SVG `viewBox` bounds around all subgraphs, nodes, edges, and labels with uniform margin padding.
+- Rasterize PNG and JPEG exports with automatic high-DPI density scaling instead of downscaling wide diagrams to `1200` px by default.
+
 ## [0.5.0] — 2026-11-05
 
 ### Added
