@@ -21,7 +21,7 @@ const require = createRequire(import.meta.url);
 
 const FONT_SIZES = { nodeLabel: 13, edgeLabel: 11, groupHeader: 12 } as const;
 const FONT_WEIGHTS = { nodeLabel: 500, edgeLabel: 400, groupHeader: 600 } as const;
-const STROKE_WIDTHS = { outerBox: 1, innerBox: 0.75, connector: 1 } as const;
+const STROKE_WIDTHS = { outerBox: 1, innerBox: 1, connector: 1.25 } as const;
 const ARROW_HEAD = { width: 8, height: 5 } as const;
 const HEADER_HEIGHT = 28;
 const OUTER_PADDING = 40;
@@ -502,8 +502,8 @@ function computeContainerChildRanks(
     const queue = childIds.filter((id) => indeg.get(id) === 0);
     for (const id of queue) rank.set(id, 0);
 
-    while (queue.length > 0) {
-      const u = queue.shift()!;
+    for (let head = 0; head < queue.length; head += 1) {
+      const u = queue[head];
       for (const v of adj.get(u) ?? []) {
         rank.set(v, Math.max(rank.get(v) ?? 0, (rank.get(u) ?? 0) + 1));
         const nextDeg = (indeg.get(v) ?? 1) - 1;
@@ -1093,10 +1093,29 @@ function ensureSubgraphEnclosure(
   edges: PositionedEdge[],
   index: HierarchyIndex,
 ): void {
-  const isDescendantOrSelf = (entityId: string, sgId: string): boolean => {
-    const chain = ancestorChain(entityId, index);
-    return chain.includes(sgId);
+  const ancestorSets = new Map<string, Set<string>>();
+  const getAncestorSet = (entityId: string): Set<string> => {
+    let set = ancestorSets.get(entityId);
+    if (!set) {
+      set = new Set(ancestorChain(entityId, index));
+      ancestorSets.set(entityId, set);
+    }
+    return set;
   };
+  const isDescendantOrSelf = (entityId: string, sgId: string): boolean => getAncestorSet(entityId).has(sgId);
+
+  const nodesByGroup = new Map<string, PositionedNode[]>();
+  for (const node of nodes) {
+    const parentId = index.nodeParent.get(node.id);
+    if (parentId) {
+      let bucket = nodesByGroup.get(parentId);
+      if (!bucket) {
+        bucket = [];
+        nodesByGroup.set(parentId, bucket);
+      }
+      bucket.push(node);
+    }
+  }
 
   function expandGroup(group: PositionedGroup): void {
     for (const child of group.children) {
@@ -1122,13 +1141,11 @@ function ensureSubgraphEnclosure(
       maxY = Math.max(maxY, child.y + child.height + padBottom);
     }
 
-    for (const node of nodes) {
-      if (index.nodeParent.get(node.id) === group.id) {
-        minX = Math.min(minX, node.x - padX);
-        minY = Math.min(minY, node.y - padTop);
-        maxX = Math.max(maxX, node.x + node.width + padX);
-        maxY = Math.max(maxY, node.y + node.height + padBottom);
-      }
+    for (const node of nodesByGroup.get(group.id) ?? []) {
+      minX = Math.min(minX, node.x - padX);
+      minY = Math.min(minY, node.y - padTop);
+      maxX = Math.max(maxX, node.x + node.width + padX);
+      maxY = Math.max(maxY, node.y + node.height + padBottom);
     }
 
     for (const edge of edges) {
@@ -1303,8 +1320,8 @@ function renderArrowDefs(customColors: Set<string>): string {
 function renderGroupSvg(group: PositionedGroup): string {
   const parts = [
     `<g class="subgraph" data-id="${escapeXml(group.id)}" data-label="${escapeXml(group.label)}">`,
-    `  <rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`,
-    `  <rect x="${group.x}" y="${group.y}" width="${group.width}" height="${HEADER_HEIGHT}" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`,
+    `  <rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="4" ry="4" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`,
+    `  <rect x="${group.x}" y="${group.y}" width="${group.width}" height="${HEADER_HEIGHT}" rx="4" ry="4" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="${STROKE_WIDTHS.outerBox}" />`,
     `  ${renderMultilineSvgText(
       group.label,
       group.x + 12,
@@ -1398,7 +1415,7 @@ function renderNodeShapeSvg(node: PositionedNode): string {
     }
     case 'rectangle':
     default:
-      return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="0" ry="0" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" />`;
+      return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="5" ry="5" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" />`;
   }
 }
 
@@ -1457,7 +1474,7 @@ function renderEdgeLabelSvg(edge: PositionedEdge): string {
   const textAttrs = `text-anchor="middle" font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" fill="var(--_text-sec)"`;
   return [
     `<g class="edge-label" data-from="${escapeXml(edge.source)}" data-to="${escapeXml(edge.target)}" data-label="${escapeXml(edge.label)}">`,
-    `  <rect x="${x - width / 2}" y="${y - height / 2}" width="${width}" height="${height}" rx="3" ry="3" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />`,
+    `  <rect x="${x - width / 2}" y="${y - height / 2}" width="${width}" height="${height}" rx="5" ry="5" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />`,
     `  ${renderMultilineSvgText(edge.label, x, y, FONT_SIZES.edgeLabel, textAttrs)}`,
     '</g>',
   ].join('\n');
