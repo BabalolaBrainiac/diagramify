@@ -17,7 +17,7 @@ import { interactiveCommand } from './commands/interactive.js';
 program
   .name('diagramify')
   .description('Architecture mapping and rendering engine')
-  .version('0.5.1');
+  .version('0.6.0');
 
 program.addCommand(generateCommand);
 program.addCommand(renderCommand);

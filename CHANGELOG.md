@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-15
+
+### Added
+
+- `diagramify spatial` command: renders the analyzed architecture as a tiered 3D spatial model on four elevation tiers (z = 0, 140, 270, 390) with isometric SVG, PNG, and standalone interactive HTML (drag-orbit, zoom, Layer Peeler, module inspection). Options: `--elevation stacked|exploded`, `--chassis integrated|open-frame`, `--theme forge|dark|nord`.
+- `diagramify statechart` command: extracts runtime state machines (state enums, transition tables, worker bounds, SKIP LOCKED and advisory lock patterns, retry ceilings, SIGINT/SIGTERM traps) from a bounded source scan, verifies each machine with deterministic traversal checks, and renders brand-styled SVG, PNG, and an HTML simulator with Step, Auto, and Inject Drop recovery actions.
+- `diagramify interactive` command: serves the live spatial model and statechart simulator over HTTP (`--port`, default 3000).
+- `generate --engine mermaid|spatial-3d|statechart`: renders with the chosen engine. The new engines read the codebase analysis directly with no model call.
+- Public engine APIs exported from `src/index.ts`: `buildSpatialModel`, `renderSpatialSVG`, `renderSpatialHTML`, `spatialOutputs`, `extractStateMachines`, `verifyStateMachine`, `renderStatechartSVG`, `renderStatechartHTML`, `statechartOutputs`, `scanStatechartSources`.
+
+### Changed
+
+- Statechart verification reports six checks per machine: zero deadlocks and unreachable sinks without terminal traps, full reachability, atomic lock before dispatch, bounded concurrency (workers <= N), bounded retry backoff ceiling, and graceful drain on shutdown signals.
+- Statechart extraction is heuristic: UI state unions in scanned sources count as machines, and their states report as unreachable sinks with the state names in the output.
+
+### Breaking
+
+- The minimum supported Node.js runtime is now `>=22.23.4`. Node 18 and Node 20 no longer receive CI coverage; the CI matrix runs Node 22 and 24. Update runtimes before upgrading.
+
 ## [0.5.1] — 2026-11-15
 
 ### Fixed
