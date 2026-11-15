@@ -84,3 +84,44 @@ export type {
 
 export { collectEvidence, summarizeEvidence, environmentNames } from './core/evidence.js';
 export type { Evidence } from './core/evidence.js';
+
+export {
+  buildSpatialModel,
+  projectIso,
+  renderSpatialHTML,
+  renderSpatialSVG,
+  spatialOutputs,
+  tierForNode,
+  svgToPng as spatialSvgToPng,
+} from './core/spatial/engine.js';
+export type {
+  SpatialChassis,
+  SpatialConduit,
+  SpatialElevation,
+  SpatialModel,
+  SpatialModule,
+  SpatialOptions,
+  SpatialThemeName,
+  SpatialTier,
+} from './core/spatial/engine.js';
+
+export {
+  extractStateMachines,
+  isTerminalStateName,
+  layoutStates,
+  renderStatechartHTML,
+  renderStatechartSVG,
+  statechartOutputs,
+  statechartSvgToPng,
+  verifyStateMachine,
+} from './core/statechart/engine.js';
+export type {
+  StateTransition as StatechartTransition,
+  StateMachine,
+  StatechartOutputs,
+  StatechartVerification,
+  VerificationCheck,
+} from './core/statechart/engine.js';
+export { scanStatechartSources } from './core/statechart/scan.js';
+export type { SourceFile } from './core/statechart/scan.js';
+export type { RenderEngine } from './core/types.js';
