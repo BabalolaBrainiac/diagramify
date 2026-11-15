@@ -70,14 +70,18 @@ const NPM_PACKAGE_MAP: Record<string, { service: string; type: DetectedDependenc
   '@sendgrid/mail': { service: 'SendGrid', type: 'other' },
 };
 
-async function parsePackageJsonDeps(rootPath: string): Promise<DetectedDependency[]> {
+async function parsePackageJsonDeps(
+  rootPath: string,
+  allRelFiles?: string[],
+  fileCache?: Map<string, string>,
+): Promise<DetectedDependency[]> {
   const detected: DetectedDependency[] = [];
-  const manifests = await glob('**/package.json', {
-    cwd: rootPath, ignore: DEFAULT_IGNORE, followSymbolicLinks: false,
-  });
-  for (const source of manifests.sort()) {
+  const manifests = allRelFiles
+    ? allRelFiles.filter((f) => f === 'package.json' || f.endsWith('/package.json'))
+    : await glob('**/package.json', { cwd: rootPath, ignore: DEFAULT_IGNORE, followSymbolicLinks: false });
+  for (const source of [...manifests].sort()) {
     try {
-      const pkg = JSON.parse(readFileSync(join(rootPath, source), 'utf-8'));
+      const pkg = JSON.parse(readFileCached(join(rootPath, source), fileCache));
       const deps = { ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies };
       for (const [name, version] of Object.entries(deps)) {
         const info = NPM_PACKAGE_MAP[name];
@@ -220,12 +224,18 @@ const DOTNET_PACKAGE_MAP: Record<string, { service: string; type: DetectedDepend
   'Swashbuckle.AspNetCore': { service: 'Swagger UI', type: 'other' },
 };
 
-async function parseDotnetDeps(rootPath: string): Promise<DetectedDependency[]> {
+async function parseDotnetDeps(
+  rootPath: string,
+  allRelFiles?: string[],
+  fileCache?: Map<string, string>,
+): Promise<DetectedDependency[]> {
   const detected: DetectedDependency[] = [];
   try {
-    const files = await glob('**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
+    const files = allRelFiles
+      ? allRelFiles.filter((f) => f.endsWith('.csproj') && !basename(f).startsWith('.'))
+      : await glob('**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
     for (const file of files) {
-      const content = readFileSync(join(rootPath, file), 'utf-8');
+      const content = readFileCached(join(rootPath, file), fileCache);
       const packageMatches = content.matchAll(/<PackageReference\s+Include="([^"]+)"(?:\s+Version="([^"]+)")?/g);
       for (const match of packageMatches) {
         const pkg = match[1];
@@ -283,10 +293,14 @@ function componentKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function componentForFile(file: string, components: string[]): string | undefined {
+function buildComponentIndex(components: string[]): Map<string, string> {
+  return new Map(components.map((name) => [componentKey(name), name]));
+}
+
+function componentForFile(file: string, componentsOrIndex: string[] | Map<string, string>): string | undefined {
   const rel = file.split('\\').join('/');
   const parts = rel.split('/');
-  const byKey = new Map(components.map((name) => [componentKey(name), name]));
+  const byKey = componentsOrIndex instanceof Map ? componentsOrIndex : buildComponentIndex(componentsOrIndex);
   const find = (value: string) => byKey.get(componentKey(value));
 
   if (parts[0] === 'src' && parts[1]) {
@@ -322,50 +336,80 @@ function componentForFile(file: string, components: string[]): string | undefine
   return undefined;
 }
 
+function readFileCached(file: string, cache?: Map<string, string>): string {
+  if (cache) {
+    const existing = cache.get(file);
+    if (existing !== undefined) return existing;
+  }
+  const content = readFileSync(file, 'utf-8');
+  if (cache && content.length <= 512 * 1024) {
+    cache.set(file, content);
+  }
+  return content;
+}
+
 export async function traceImportGraph(
   rootPath: string,
   files: string[],
-  components: string[] = [],
+  components: string[] | Map<string, string> = [],
+  fileCache?: Map<string, string>,
 ): Promise<Array<{from: string; to: string; source: string}>> {
+  const componentIndex = components instanceof Map ? components : buildComponentIndex(components);
   const links: Array<{from: string; to: string; source: string}> = [];
+  const seen = new Set<string>();
   const jsImportRe = /(?:from\s+|import\s*\(|require\s*\()\s*['"](\.[^'"]+)['"]/g;
   const pythonImportRe = /^\s*(?:from|import)\s+([.\w]+)/gm;
   for (const file of files.slice(0, 500)) {
     const rel = relative(rootPath, file);
-    const from = componentForFile(rel, components);
+    const from = componentForFile(rel, componentIndex);
     if (!from) {
       continue;
     }
     try {
-      const content = readFileSync(file, 'utf-8');
+      const content = readFileCached(file, fileCache);
       let m: RegExpExecArray | null;
       jsImportRe.lastIndex = 0;
       while ((m = jsImportRe.exec(content)) !== null) {
         const targetPath = normalize(join(dirname(rel), m[1])).split('\\').join('/');
-        const to = componentForFile(targetPath, components);
+        const to = componentForFile(targetPath, componentIndex);
         if (to && from !== to && !targetPath.startsWith('..')) {
-          links.push({ from, to, source: rel });
+          const k = `${from}->${to}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            links.push({ from, to, source: rel });
+          }
         }
       }
 
       pythonImportRe.lastIndex = 0;
       while ((m = pythonImportRe.exec(content)) !== null) {
         const importPath = m[1].replace(/^\.+/, '').split('.').join('/');
-        const to = componentForFile(importPath, components);
+        const to = componentForFile(importPath, componentIndex);
         if (to && from !== to) {
-          links.push({ from, to, source: rel });
+          const k = `${from}->${to}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            links.push({ from, to, source: rel });
+          }
         }
       }
     } catch { continue; }
   }
-  const seen = new Set<string>();
-  return links.filter(l => { const k = `${l.from}->${l.to}`; if (seen.has(k) || l.from === l.to) return false; seen.add(k); return true; });
+  return links;
 }
 
-async function detectDependencies(rootPath: string): Promise<DetectedDependency[]> {
+async function detectDependencies(
+  rootPath: string,
+  allRelFiles?: string[],
+  fileCache?: Map<string, string>,
+): Promise<DetectedDependency[]> {
   const [npm, py, go, rust, java, dotnet] = await Promise.all([
-    parsePackageJsonDeps(rootPath), parsePythonDeps(rootPath), parseGoDeps(rootPath),
-    parseRustDeps(rootPath), parseJavaDeps(rootPath), parseDotnetDeps(rootPath),
+    parsePackageJsonDeps(rootPath, allRelFiles, fileCache),
+    parsePythonDeps(rootPath),
+    parseGoDeps(rootPath),
+    parseRustDeps(rootPath),
+    parseJavaDeps(rootPath),
+    parseDotnetDeps(rootPath, allRelFiles, fileCache),
   ]);
   return [...npm, ...py, ...go, ...rust, ...java, ...dotnet];
 }
@@ -416,13 +460,17 @@ const ENDPOINT_PATTERNS = [
   /@(app|router)\.(get|post|put|patch|delete)\s*\(\s*['"`]([^'"` ]*)/gi,
 ];
 
-async function detectAPIEndpoints(rootPath: string, files: string[]): Promise<DetectedEndpoint[]> {
+async function detectAPIEndpoints(
+  rootPath: string,
+  files: string[],
+  fileCache?: Map<string, string>,
+): Promise<DetectedEndpoint[]> {
   const endpoints: DetectedEndpoint[] = [];
   
   for (const file of files) {
     if (endpoints.length >= 100) break;
     try {
-      const content = readFileSync(file, 'utf-8');
+      const content = readFileCached(file, fileCache);
       
       let match;
       for (const pattern of ENDPOINT_PATTERNS) {
@@ -447,19 +495,30 @@ async function detectAPIEndpoints(rootPath: string, files: string[]): Promise<De
   return endpoints;
 }
 
-async function detectServiceDirectories(rootPath: string) {
+async function detectServiceDirectories(
+  rootPath: string,
+  allRelFiles?: string[],
+  fileCache?: Map<string, string>,
+) {
   const dirs = new Set<string>();
   const sources: Array<{ component: string; source: string }> = [];
+  const seenSources = new Set<string>();
   const addComponent = (component: string, source: string) => {
     dirs.add(component);
-    if (!sources.some(item => item.component === component && item.source === source)) sources.push({ component, source });
+    const key = `${component}\0${source}`;
+    if (!seenSources.has(key)) {
+      seenSources.add(key);
+      sources.push({ component, source });
+    }
   };
   const patterns = ['apps/', 'services/', 'packages/', 'microservices/'];
   const pkgMap: Record<string, string> = {}; // pkgName -> dirName
   const allPkgDeps: Array<{dirName: string, deps: string[], source: string}> = [];
   
   try {
-    const moduleProjects = await glob('src/Modules/*/**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
+    const moduleProjects = allRelFiles
+      ? allRelFiles.filter((f) => /^src\/Modules\/[^/]+\/.*\.csproj$/i.test(f))
+      : await glob('src/Modules/*/**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
     for (const project of moduleProjects) {
       const parts = project.split('/');
       const moduleIndex = parts.indexOf('Modules');
@@ -468,10 +527,16 @@ async function detectServiceDirectories(rootPath: string) {
       }
     }
 
-    const moduleFiles = await glob(
-      ['src/**/*.module.{ts,js}', 'src/**/*.{worker,consumer,job}.{ts,js}', 'src/{worker,consumer,scheduler}.{ts,js}'],
-      { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false },
-    );
+    const moduleFiles = allRelFiles
+      ? allRelFiles.filter(
+          (f) =>
+            /^src\/.*\.(?:module|worker|consumer|job)\.(?:ts|js)$/.test(f) ||
+            /^src\/(?:worker|consumer|scheduler)\.(?:ts|js)$/.test(f),
+        )
+      : await glob(
+          ['src/**/*.module.{ts,js}', 'src/**/*.{worker,consumer,job}.{ts,js}', 'src/{worker,consumer,scheduler}.{ts,js}'],
+          { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false },
+        );
     for (const file of moduleFiles) {
       const withoutExtension = basename(file).replace(/\.[^.]+$/, '');
       const stem = withoutExtension.replace(/\.(?:module|worker|consumer|job)$/i, '');
@@ -480,10 +545,12 @@ async function detectServiceDirectories(rootPath: string) {
       }
     }
 
-    const endpointFiles = await glob(
-      ['**/{views,routes,controllers}/*.{py,ts,js}'],
-      { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false },
-    );
+    const endpointFiles = allRelFiles
+      ? allRelFiles.filter((f) => /(?:^|\/)(?:views|routes|controllers)\/[^/]+\.(?:py|ts|js)$/.test(f))
+      : await glob(
+          ['**/{views,routes,controllers}/*.{py,ts,js}'],
+          { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false },
+        );
     for (const file of endpointFiles) {
       const stem = basename(file).replace(/\.[^.]+$/, '');
       if (!stem || ['__init__', 'index', 'api_blueprints'].includes(stem.toLowerCase())) {
@@ -492,10 +559,14 @@ async function detectServiceDirectories(rootPath: string) {
       addComponent(`${stem} endpoint`, file);
     }
 
-    const serviceDescriptors = await glob(
-      ['**/serverless.{yml,yaml,ts}', '**/package.json', '**/requirements.txt', '**/go.mod', '**/Cargo.toml'],
-      { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false, deep: 5 },
-    );
+    const serviceDescriptors = allRelFiles
+      ? allRelFiles.filter((f) =>
+          /^(?:[^/]+\/){0,4}(?:serverless\.(?:yml|yaml|ts)|package\.json|requirements\.txt|go\.mod|Cargo\.toml)$/.test(f),
+        )
+      : await glob(
+          ['**/serverless.{yml,yaml,ts}', '**/package.json', '**/requirements.txt', '**/go.mod', '**/Cargo.toml'],
+          { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false, deep: 5 },
+        );
     for (const file of serviceDescriptors) {
       const parent = basename(dirname(file));
       const relParent = dirname(file).split('\\').join('/');
@@ -510,7 +581,9 @@ async function detectServiceDirectories(rootPath: string) {
       }
     }
 
-    const files = await glob('**/(package.json|go.mod)', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
+    const files = allRelFiles
+      ? allRelFiles.filter((f) => /(?:^|\/)(?:package\.json|go\.mod)$/.test(f))
+      : await glob('**/(package.json|go.mod)', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
     for (const f of files) {
       if (!f.includes('/')) continue;
       
@@ -524,7 +597,7 @@ async function detectServiceDirectories(rootPath: string) {
             
             if (f.endsWith('package.json')) {
               try {
-                const content = readFileSync(join(rootPath, f), 'utf-8');
+                const content = readFileCached(join(rootPath, f), fileCache);
                 const pkg = JSON.parse(content);
                 if (pkg.name) {
                   pkgMap[pkg.name] = dirName;
@@ -584,8 +657,10 @@ const SOURCE_SERVICE_RULES: SourceServiceRule[] = [
 async function detectServiceLinks(
   rootPath: string,
   files: string[],
-  components: string[],
+  components: string[] | Map<string, string>,
+  fileCache?: Map<string, string>,
 ): Promise<DetectedServiceLink[]> {
+  const componentIndex = components instanceof Map ? components : buildComponentIndex(components);
   const links: DetectedServiceLink[] = [];
   const seen = new Set<string>();
 
@@ -594,14 +669,14 @@ async function detectServiceLinks(
       continue;
     }
     const source = relative(rootPath, file).split('\\').join('/');
-    const from = componentForFile(source, components);
+    const from = componentForFile(source, componentIndex);
     if (!from) {
       continue;
     }
 
     let content: string;
     try {
-      content = readFileSync(file, 'utf-8').slice(0, 512 * 1024);
+      content = readFileCached(file, fileCache).slice(0, 512 * 1024);
     } catch {
       continue;
     }
@@ -642,14 +717,20 @@ function componentFromProjectPath(rootPath: string, projectPath: string): string
   return basename(projectPath).replace(/\.csproj$/i, '');
 }
 
-async function traceDotnetProjectReferences(rootPath: string): Promise<Array<{from: string; to: string; source: string}>> {
+async function traceDotnetProjectReferences(
+  rootPath: string,
+  allRelFiles?: string[],
+  fileCache?: Map<string, string>,
+): Promise<Array<{from: string; to: string; source: string}>> {
   const links: Array<{from: string; to: string; source: string}> = [];
   try {
-    const projects = await glob('**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
+    const projects = allRelFiles
+      ? allRelFiles.filter((f) => f.endsWith('.csproj'))
+      : await glob('**/*.csproj', { cwd: rootPath, ignore: DEFAULT_IGNORE, dot: false });
     for (const relProject of projects) {
       const projectPath = join(rootPath, relProject);
       const from = componentFromProjectPath(rootPath, projectPath);
-      const content = readFileSync(projectPath, 'utf-8');
+      const content = readFileCached(projectPath, fileCache);
 
       for (const match of content.matchAll(/<ProjectReference\s+Include="([^"]+)"/g)) {
         const targetPath = join(dirname(projectPath), match[1].split('\\').join('/'));
@@ -749,21 +830,21 @@ function scoreFile(filePath: string, root: string): number {
   return score;
 }
 
-async function walkFiles(root: string, maxFiles: number): Promise<string[]> {
-  const pattern = '**/*';
-  const files = await glob(pattern, {
+async function scanRepoFiles(root: string, maxFiles: number): Promise<{ selectedFiles: string[]; allRelFiles: string[] }> {
+  const allRelFiles = await glob('**/*', {
     cwd: root,
     ignore: DEFAULT_IGNORE,
     dot: false,
     followSymbolicLinks: false,
   });
 
-  const scored = files
+  const selectedFiles = allRelFiles
     .map((f) => ({ path: join(root, f), score: scoreFile(f, root) }))
     .sort((a, b) => b.score - a.score)
-    .slice(0, maxFiles);
+    .slice(0, maxFiles)
+    .map((s) => s.path);
 
-  return scored.map((s) => s.path);
+  return { selectedFiles, allRelFiles };
 }
 
 async function buildFileTree(files: string[], root: string, maxLines: number = 1000): Promise<string> {
@@ -810,14 +891,18 @@ async function buildFileTree(files: string[], root: string, maxLines: number = 1
   return output;
 }
 
-async function readTopFiles(files: string[], budgetChars: number = 40000): Promise<string> {
+async function readTopFiles(
+  files: string[],
+  budgetChars: number = 40000,
+  fileCache?: Map<string, string>,
+): Promise<string> {
   let collected = '';
 
   for (const file of files) {
     if (collected.length > budgetChars) break;
 
     try {
-      const content = readFileSync(file, 'utf-8');
+      const content = readFileCached(file, fileCache);
       const ext = extname(file);
 
       const snippet = content.slice(0, Math.max(500, budgetChars - collected.length));
@@ -864,13 +949,15 @@ function detectLanguage(files: string[]): string {
   return langMap[primaryExt] || 'unknown';
 }
 
-async function findEndpointCandidateFiles(rootPath: string): Promise<string[]> {
+async function findEndpointCandidateFiles(rootPath: string, allRelFiles?: string[]): Promise<string[]> {
   try {
-    const files = await glob('**/*.{cs,ts,tsx,js,jsx,py,go,java}', {
-      cwd: rootPath,
-      ignore: DEFAULT_IGNORE,
-      dot: false,
-    });
+    const files = allRelFiles
+      ? allRelFiles.filter((file) => /\.(?:cs|tsx?|jsx?|py|go|java)$/i.test(file))
+      : await glob('**/*.{cs,ts,tsx,js,jsx,py,go,java}', {
+          cwd: rootPath,
+          ignore: DEFAULT_IGNORE,
+          dot: false,
+        });
 
     return files
       .map((file) => join(rootPath, file))
@@ -914,9 +1001,10 @@ function estimateDiagramType(summary: string): DiagramType {
 
 export async function analyzeCodebase(rootPath: string, maxFiles: number = 1000): Promise<AnalysisResult> {
   if (!Number.isInteger(maxFiles) || maxFiles < 1) throw new Error('The file limit must be a positive integer.');
-  const files = await walkFiles(rootPath, maxFiles);
+  const fileCache = new Map<string, string>();
+  const { selectedFiles: files, allRelFiles } = await scanRepoFiles(rootPath, maxFiles);
   const fileTree = await buildFileTree(files, rootPath);
-  const snippets = await readTopFiles(files);
+  const snippets = await readTopFiles(files, 40000, fileCache);
 
   const language = detectLanguage(files);
   const summary = `Codebase Analysis:\nLanguage: ${language}\nFiles analyzed: ${files.length}\n\nFile Structure:\n${fileTree}\n\nKey files:\n${snippets}`;
@@ -930,9 +1018,9 @@ export async function analyzeCodebase(rootPath: string, maxFiles: number = 1000)
   const keyModules = files.slice(0, 10).map((f) => relative(rootPath, f));
 
   const [depsByLang, envServices, structure, dockerServices, workspaceNames, evidence] = await Promise.all([
-    detectDependencies(rootPath),
+    detectDependencies(rootPath, allRelFiles, fileCache),
     parseEnvServices(rootPath),
-    detectServiceDirectories(rootPath),
+    detectServiceDirectories(rootPath, allRelFiles, fileCache),
     parseDockerCompose(rootPath),
     detectWorkspaces(rootPath),
     collectEvidence(rootPath),
@@ -940,18 +1028,19 @@ export async function analyzeCodebase(rootPath: string, maxFiles: number = 1000)
 
   const serviceDirectories = structure.dirs;
   const internalLinks = structure.links;
+  const componentIndex = buildComponentIndex(serviceDirectories);
 
-  const endpointCandidates = await findEndpointCandidateFiles(rootPath);
+  const endpointCandidates = await findEndpointCandidateFiles(rootPath, allRelFiles);
 
   const [apiEndpoints, importLinks, projectLinks, sourceLinks] = await Promise.all([
-    detectAPIEndpoints(rootPath, endpointCandidates.length > 0 ? endpointCandidates : files),
-    traceImportGraph(rootPath, files, serviceDirectories),
-    traceDotnetProjectReferences(rootPath),
-    detectServiceLinks(rootPath, files, serviceDirectories),
+    detectAPIEndpoints(rootPath, endpointCandidates.length > 0 ? endpointCandidates : files, fileCache),
+    traceImportGraph(rootPath, files, componentIndex, fileCache),
+    traceDotnetProjectReferences(rootPath, allRelFiles, fileCache),
+    detectServiceLinks(rootPath, files, componentIndex, fileCache),
   ]);
 
   const manifestLinks: DetectedServiceLink[] = depsByLang.flatMap(dependency => {
-    const from = dependency.source ? componentForFile(dependency.source, serviceDirectories) : undefined;
+    const from = dependency.source ? componentForFile(dependency.source, componentIndex) : undefined;
     return from && dependency.source ? [{
       from, to: dependency.name, label: 'depends on', kind: 'sync', source: dependency.source,
     }] : [];

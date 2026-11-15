@@ -88,10 +88,11 @@ export function graphToMermaid(
   lines.push(`flowchart ${graph.direction}`);
 
   const grouped = new Set<string>();
+  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
 
   for (const group of graph.groups) {
     const members = group.nodeIds
-      .map((id) => graph.nodes.find((n) => n.id === id))
+      .map((id) => nodeById.get(id))
       .filter((n): n is IRNode => Boolean(n));
 
     if (members.length === 0) {
@@ -141,6 +142,8 @@ export function mermaidToGraph(source: string, title?: string): ArchitectureGrap
     }
   }
 
+  const groupById = new Map(graph.groups.map((g) => [g.id, g]));
+
   for (const node of parsed.nodes) {
     const groupId = groupOf.get(node.id);
     const label = canonicalLabel(unescapeLabel(node.label || node.id));
@@ -152,7 +155,7 @@ export function mermaidToGraph(source: string, title?: string): ArchitectureGrap
       groupId,
     });
     if (groupId) {
-      graph.groups.find((g) => g.id === groupId)?.nodeIds.push(node.id);
+      groupById.get(groupId)?.nodeIds.push(node.id);
     }
   }
 

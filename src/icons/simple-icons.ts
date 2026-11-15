@@ -524,23 +524,34 @@ export interface SimpleIconConfig {
 import { AWS_INLINE_SVG } from './aws-inline.js';
 import { INLINE_SVG } from './inline-icons.js';
 
+const normalizedSlugIndex = (() => {
+  const index = new Map<string, string>();
+  for (const [key, val] of Object.entries(serviceToSlugMap)) {
+    const stripped = key.replace(/[^a-z0-9]/g, '');
+    if (stripped && !index.has(stripped)) index.set(stripped, val);
+  }
+  return index;
+})();
+
+const ICON_CACHE_LIMIT = 512;
+const iconUrlCache = new Map<string, string>();
+
 export function getIconURL(service: string, hexColor?: string, _offline = false): string {
   const normalizedService = service.toLowerCase().trim();
-  let mappedSlug = serviceToSlugMap[normalizedService];
-  
+  const cacheKey = `${normalizedService}\0${hexColor ?? ''}`;
+  const cached = iconUrlCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  let mappedSlug: string | undefined = serviceToSlugMap[normalizedService];
+
   if (!mappedSlug) {
     const stripped = normalizedService
       .replace(/\([^)]*\)/g, '')
       .replace(/\b(?:aws|amazon|google cloud|gcp|microsoft azure|azure)\b/g, '')
       .replace(/[^a-z0-9]/g, '');
-    
+
     if (stripped) {
-      for (const [key, val] of Object.entries(serviceToSlugMap)) {
-        if (key.replace(/[^a-z0-9]/g, '') === stripped) {
-          mappedSlug = val;
-          break;
-        }
-      }
+      mappedSlug = normalizedSlugIndex.get(stripped);
     }
   }
 
@@ -548,35 +559,30 @@ export function getIconURL(service: string, hexColor?: string, _offline = false)
   const color = colorValue.startsWith('#') ? colorValue : `#${colorValue}`;
   const slug = mappedSlug ?? normalizedService.replace(/[^a-z0-9]/g, '');
 
-  // Check AWS inline SVGs
+  let uri: string;
   const inline = AWS_INLINE_SVG[slug];
   if (inline) {
-    return 'data:image/svg+xml;base64,' + encodeSVG(inline);
+    uri = 'data:image/svg+xml;base64,' + encodeSVG(inline);
+  } else {
+    const generalInline = INLINE_SVG[slug];
+    if (generalInline) {
+      uri = 'data:image/svg+xml;base64,' + encodeSVG(generalInline.replace(/currentColor/g, color));
+    } else {
+      const brand = brandIconSVG(slug, color);
+      if (brand) {
+        uri = 'data:image/svg+xml;base64,' + encodeSVG(brand);
+      } else {
+        const semantic = semanticIconSVG(service, color);
+        uri = semantic
+          ? 'data:image/svg+xml;base64,' + encodeSVG(semantic)
+          : 'data:image/svg+xml;base64,' + encodeSVG(getFallbackSVG(service, color));
+      }
+    }
   }
 
-  // Check general inline SVGs
-  const generalInline = INLINE_SVG[slug];
-  if (generalInline) {
-    const colored = generalInline.replace(/currentColor/g, color);
-    return 'data:image/svg+xml;base64,' + encodeSVG(colored);
-  }
-
-  // Brand icons generated from simple-icons at build time. These cover most
-  // services, need no network, and carry the correct brand colour.
-  const brand = brandIconSVG(slug, color);
-  if (brand) {
-    return 'data:image/svg+xml;base64,' + encodeSVG(brand);
-  }
-
-  // A semantic symbol states the component type without borrowing a vendor logo.
-  const semantic = semanticIconSVG(service, color);
-  if (semantic) {
-    return 'data:image/svg+xml;base64,' + encodeSVG(semantic);
-  }
-
-  // No mapping found, return fallback SVG as data URI
-  const fallbackSvg = getFallbackSVG(service, color);
-  return 'data:image/svg+xml;base64,' + encodeSVG(fallbackSvg);
+  if (iconUrlCache.size >= ICON_CACHE_LIMIT) iconUrlCache.clear();
+  iconUrlCache.set(cacheKey, uri);
+  return uri;
 }
 
 export function getFallbackSVG(label: string, color: string = '#999999'): string {

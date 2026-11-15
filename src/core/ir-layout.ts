@@ -24,8 +24,15 @@ function toNumber(value: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const ATTR_PATTERNS = new Map<string, RegExp>();
+
 function attribute(tag: string, name: string): string | undefined {
-  const match = tag.match(new RegExp(`\\s${name}="([^"]*)"`));
+  let pattern = ATTR_PATTERNS.get(name);
+  if (!pattern) {
+    pattern = new RegExp(`\\s${name}="([^"]*)"`);
+    ATTR_PATTERNS.set(name, pattern);
+  }
+  const match = tag.match(pattern);
   return match ? match[1] : undefined;
 }
 

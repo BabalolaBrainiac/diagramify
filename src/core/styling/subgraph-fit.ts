@@ -18,8 +18,15 @@ interface Box {
   height: number;
 }
 
+const ATTR_PATTERNS = new Map<string, RegExp>();
+
 function attribute(tag: string, name: string): string | undefined {
-  const match = tag.match(new RegExp(`\\s${name}="([^"]*)"`));
+  let pattern = ATTR_PATTERNS.get(name);
+  if (!pattern) {
+    pattern = new RegExp(`\\s${name}="([^"]*)"`);
+    ATTR_PATTERNS.set(name, pattern);
+  }
+  const match = tag.match(pattern);
   return match ? match[1] : undefined;
 }
 
@@ -102,7 +109,6 @@ export function fitSubgraphBoxes(svg: string, membership: Map<string, string[]>)
     return svg;
   }
 
-  let result = svg;
   const open = /<g\b[^>]*class="[^"]*\bsubgraph\b[^"]*"[^>]*>/g;
 
   // Collect first, then rewrite, so the indexes stay valid while scanning.
@@ -179,11 +185,25 @@ export function fitSubgraphBoxes(svg: string, membership: Map<string, string[]>)
     }
   }
 
-  for (const edit of edits) {
-    result = result.replace(edit.from, edit.to);
+  if (edits.length === 0) {
+    return svg;
   }
 
-  return result;
+  const replacements = new Map<string, string>();
+  for (const edit of edits) {
+    if (!replacements.has(edit.from)) {
+      replacements.set(edit.from, edit.to);
+    }
+  }
+
+  return svg.replace(/<rect\b[^>]*>/g, (tag) => {
+    const next = replacements.get(tag);
+    if (next === undefined) {
+      return tag;
+    }
+    replacements.delete(tag);
+    return next;
+  });
 }
 
 function withBox(tag: string, box: Box): string {

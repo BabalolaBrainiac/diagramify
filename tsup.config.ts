@@ -7,6 +7,7 @@ export default defineConfig({
     'react/index': 'src/react/index.tsx',
   },
   format: ['esm'],
+  splitting: true,
   dts: true,
   clean: true,
   sourcemap: true,

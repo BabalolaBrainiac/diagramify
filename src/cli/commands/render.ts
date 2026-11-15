@@ -1,9 +1,6 @@
 import { Command } from 'commander';
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { basename as pathBasename, join, resolve } from 'path';
-import { renderDiagram, renderGraph } from '../../core/render.js';
-import { deserializeGraph } from '../../core/ir.js';
-import { completeArchitecture } from '../../core/generate.js';
 import type { OutputFormat, RenderOptions } from '../../core/types.js';
 
 const VALID_OUTPUT_FORMATS = new Set<OutputFormat>([
@@ -89,6 +86,11 @@ export const renderCommand = new Command()
           throw new Error('Supply a request saved with generate --prepare.');
         }
       }
+      const [{ renderDiagram, renderGraph }, { deserializeGraph }, { completeArchitecture }] = await Promise.all([
+        import('../../core/render.js'),
+        import('../../core/ir.js'),
+        import('../../core/generate.js'),
+      ]);
       const result = inputFormat === 'proposal'
         ? await renderGraph(completeArchitecture(request, JSON.parse(mermaidSource)), formats, renderOptions)
         : inputFormat === 'json'
