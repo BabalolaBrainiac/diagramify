@@ -8,6 +8,8 @@ export interface GitHubActionsOptions {
   gateOnPR?: boolean;
   /** Committed IR file `diagramify check` compares against. */
   baseline?: string;
+  /** Add a pull_request job that updates the PR description with the architecture and state diff. Default: true. */
+  prDiagram?: boolean;
 }
 
 export function generateGitHubActionsWorkflow(options: GitHubActionsOptions): string {
@@ -55,7 +57,37 @@ export function generateGitHubActionsWorkflow(options: GitHubActionsOptions): st
   }
 
   const gateOnPR = options.gateOnPR !== false;
+  const prDiagram = options.prDiagram !== false;
   const baseline = options.baseline || 'diagrams/architecture.json';
+
+  const prDiagramJob = prDiagram
+    ? `
+
+  pr-architecture-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '${nodeVer}'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Update pull request architecture diagram
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: npx diagramify-ai pr \${{ github.event.pull_request.number }} --base origin/\${{ github.base_ref }} --head HEAD`
+    : '';
 
   const gateJob = gateOnPR
     ? `
@@ -115,7 +147,7 @@ export function generateGitHubActionsWorkflow(options: GitHubActionsOptions): st
         run: exit 1`
     : '';
 
-  const prTrigger = gateOnPR ? `
+  const prTrigger = (gateOnPR || prDiagram) ? `
   pull_request:
     branches:
       - ${branch}` : '';
@@ -131,6 +163,6 @@ jobs:
   generate-diagrams:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    steps:${steps}${gateJob}
+    steps:${steps}${gateJob}${prDiagramJob}
 `;
 }
