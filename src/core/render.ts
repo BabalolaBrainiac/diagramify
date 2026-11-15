@@ -141,7 +141,7 @@ function renderSVG(
 
     return svg;
   } catch (error) {
-    throw new Error(`Failed to render SVG: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to render SVG: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 
@@ -231,7 +231,7 @@ export async function renderDiagram(
           const html = generateInteractiveHTML(baseSVG, mermaidSource, options);
           result.html = html;
         } catch (error) {
-          throw new Error(`HTML generation failed: ${error instanceof Error ? error.message : String(error)}`);
+          throw new Error(`HTML generation failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
         }
       }
 
@@ -251,7 +251,7 @@ export async function renderDiagram(
         }
       }
     } catch (error) {
-      throw new Error(`SVG rendering failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`SVG rendering failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
   }
 
@@ -262,7 +262,7 @@ export async function renderDiagram(
         background: rasterBackground,
       });
     } catch (error) {
-      throw new Error(`PNG rasterization failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`PNG rasterization failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
   }
 
@@ -276,6 +276,7 @@ export async function renderDiagram(
     } catch (error) {
       throw new Error(
         `JPEG rasterization failed: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
       );
     }
   }
@@ -290,7 +291,7 @@ export async function renderDiagram(
         background: rasterBackground,
       });
     } catch (error) {
-      throw new Error(`PDF export failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`PDF export failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
   }
 

@@ -81,9 +81,9 @@ export function createOllamaEngine(options: OllamaOptions): ArchitectureEngine {
           .reduce<number>((sum, count) => sum + (typeof count === 'number' && Number.isFinite(count) && count >= 0 ? count : 0), 0);
         return { graph: JSON.parse(result.response), tokensUsed: tokens };
       } catch (error) {
-        if (controller.signal.aborted) throw new Error('The local model request timed out.');
-        if (error instanceof SyntaxError) throw new Error('The local model returned invalid JSON.');
-        if (error instanceof TypeError) throw new Error('Cannot reach the local model server. Start Ollama and select an installed model.');
+        if (controller.signal.aborted) throw new Error('The local model request timed out.', { cause: error });
+        if (error instanceof SyntaxError) throw new Error('The local model returned invalid JSON.', { cause: error });
+        if (error instanceof TypeError) throw new Error('Cannot reach the local model server. Start Ollama and select an installed model.', { cause: error });
         throw error;
       } finally {
         clearTimeout(timer);

@@ -1,0 +1,11 @@
+version: 2
+
+githubApp:
+  enabled: true
+  dependencyOverviewEnabled: true
+  disableCommentsAndCheckRuns: false
+
+issueRules:
+  criticalCVE: true
+  highCVE: true
+  malware: true

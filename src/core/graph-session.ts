@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { graphDocumentSchema, readGraphDocument } from './graph-document.js';
 import type { ArchitectureGraph, IREdge } from './ir.js';
 
-const fields = graphDocumentSchema.innerType().shape;
+const fields = graphDocumentSchema.shape;
 const id = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
 export const graphOperationSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('node.add'), node: fields.nodes.element }),
