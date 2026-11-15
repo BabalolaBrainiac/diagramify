@@ -10,6 +10,9 @@ import { makeCICommand } from './commands/ci.js';
 import { makePrCommand } from './commands/pr.js';
 import { checkCommand } from './commands/check.js';
 import { modelsCommand } from './commands/models.js';
+import { spatialCommand } from './commands/spatial.js';
+import { statechartCommand } from './commands/statechart.js';
+import { interactiveCommand } from './commands/interactive.js';
 
 program
   .name('diagramify')
@@ -26,6 +29,9 @@ program.addCommand(makeCICommand());
 program.addCommand(makePrCommand());
 program.addCommand(checkCommand);
 program.addCommand(modelsCommand);
+program.addCommand(spatialCommand);
+program.addCommand(statechartCommand);
+program.addCommand(interactiveCommand);
 
 // `dev` is a discoverable alias for `preview` — same options, clearer name for development workflows
 const devCommand = new Command()

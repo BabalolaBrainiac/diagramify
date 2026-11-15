@@ -7,8 +7,7 @@ const VALID_OUTPUT_FORMATS = new Set<OutputFormat>([
   'svg', 'png', 'jpeg', 'html', 'mmd', 'pdf', 'drawio', 'excalidraw', 'json',
 ]);
 
-function parseOutputFormats(value: string | undefined, defaults: OutputFormat[]): OutputFormat[] {
-  const formats = value
+function parseOutputFormats(value: string | undefined, defaults: OutputFormat[]): OutputFormat[] {  const formats = value
     ? value.split(',').map((f: string) => f.trim().toLowerCase()).filter(Boolean)
     : defaults;
 
@@ -21,6 +20,16 @@ function parseOutputFormats(value: string | undefined, defaults: OutputFormat[])
   }
 
   return formats as OutputFormat[];
+}
+
+const RENDER_ENGINES = new Set(['mermaid', 'spatial-3d', 'statechart']);
+
+function parseRenderEngine(value: string | undefined): 'mermaid' | 'spatial-3d' | 'statechart' {
+  const engine = value ?? 'mermaid';
+  if (!RENDER_ENGINES.has(engine)) {
+    throw new Error(`Unsupported --engine "${engine}". Use one of: ${[...RENDER_ENGINES].join(', ')}.`);
+  }
+  return engine as 'mermaid' | 'spatial-3d' | 'statechart';
 }
 
 export const generateCommand = new Command()
@@ -60,6 +69,11 @@ export const generateCommand = new Command()
     'Build the diagram from the codebase alone. No provider, no network, no API key.',
   )
   .option('--offline', 'Same as --no-llm, and the HTML viewer makes no network request')
+  .option(
+    '--engine <engine>',
+    'Render engine: mermaid | spatial-3d | statechart (default: mermaid)',
+    'mermaid',
+  )
   .action(async (options) => {
     try {
       const codebasePath = options.path ? resolve(options.path) : process.cwd();
@@ -76,6 +90,7 @@ export const generateCommand = new Command()
         description: options.description,
         diagramType: options.type as DiagramType,
         noLLM: options.llm === false || options.offline === true,
+        renderEngine: parseRenderEngine(options.engine),
         config: {
           provider: options.provider,
           model: options.model,
@@ -119,7 +134,7 @@ export const generateCommand = new Command()
       } else {
         mkdirSync(outDir, { recursive: true });
 
-        if (formats.includes('mmd')) {
+        if (formats.includes('mmd') && result.mermaid) {
           const mmdPath = join(outDir, `${baseName}.mmd`);
           writeFileSync(mmdPath, result.mermaid);
           console.error(`Generated: ${mmdPath}`);

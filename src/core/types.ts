@@ -59,7 +59,11 @@ export interface GenerateOptions {
   noLLM?: boolean;
   /** A caller can supply interpretation without a provider key. */
   engine?: ArchitectureEngine;
+  /** Which renderer turns the graph into output. The default stays Mermaid. */
+  renderEngine?: RenderEngine;
 }
+
+export type RenderEngine = 'mermaid' | 'spatial-3d' | 'statechart';
 
 export interface RenderOptions {
   theme?: string;

@@ -107,7 +107,35 @@ export async function generateGraph(options: GenerateOptions): Promise<{ graph: 
 
 export async function generateDiagram(options: GenerateOptions): Promise<DiagramifyResult> {
   const config = await loadConfig(options.config);
+  const engine = options.renderEngine ?? 'mermaid';
+
+  if (engine !== 'mermaid') {
+    if (options.input !== 'codebase') {
+      throw new Error(`The ${engine} engine reads a codebase. Supply a path.`);
+    }
+    const root = options.path || process.cwd();
+    const analysis = await analyzeCodebase(root);
+    const graph = analysisToGraph(analysis, { title: basename(resolve(root)), direction: 'LR' });
+    if (!graph.nodes.length) throw new Error('The analysis found no components to model.');
+    const formats = (config.defaultOutput ?? ['svg', 'html'])
+      .filter((f): f is 'svg' | 'png' | 'html' => f === 'svg' || f === 'png' || f === 'html');
+
+    if (engine === 'spatial-3d') {
+      const { spatialOutputs } = await import('./spatial/engine.js');
+      const outputs = await spatialOutputs(graph, formats, {});
+      return { mermaid: '', graph, diagramType: 'auto', tokensUsed: 0, quality: assessGraph(graph), ...outputs };
+    }
+
+    const { extractStateMachines, statechartOutputs, verifyStateMachine } = await import('./statechart/engine.js');
+    const { scanStatechartSources } = await import('./statechart/scan.js');
+    const machines = extractStateMachines(await scanStatechartSources(root));
+    if (!machines.length) throw new Error('No runtime state machine was found in the sources.');
+    const outputs = await statechartOutputs(machines[0], formats, verifyStateMachine(machines[0]));
+    return { mermaid: '', graph, diagramType: 'auto', tokensUsed: 0, quality: assessGraph(graph), ...outputs };
+  }
+
   const { graph, tokensUsed } = await generateGraph(options);
+
   const formats = config.defaultOutput ?? ['svg', 'mmd'];
   const result = await renderGraph(graph, formats, {
     theme: config.theme, darkMode: config.darkMode, backgroundColor: config.backgroundColor,
