@@ -41,14 +41,14 @@ export interface DiagramTheme {
 const lightTheme: DiagramTheme = {
   mode: 'light',
   colors: {
-    background: '#FFFFFF',
-    text: '#1A1A1A',
-    border: '#E0E0E0',
-    shadow: '#000000',
-    nodeBackground: '#FAFAFA',
-    nodeBorder: '#D0D0D0',
-    edgeStroke: '#666666',
-    edgeLabel: '#333333',
+    background: '#F8FAFC',
+    text: '#0F172A',
+    border: '#CBD5E1',
+    shadow: '#0F172A',
+    nodeBackground: '#FFFFFF',
+    nodeBorder: '#94A3B8',
+    edgeStroke: '#64748B',
+    edgeLabel: '#334155',
   },
   spacing: {
     padding: 12,
@@ -62,24 +62,24 @@ const lightTheme: DiagramTheme = {
     lineHeight: 1.4,
   },
   shadow: {
-    blur: 4,
+    blur: 3,
     offsetX: 0,
-    offsetY: 2,
-    opacity: 0.1,
+    offsetY: 1,
+    opacity: 0.08,
   },
 };
 
 const darkTheme: DiagramTheme = {
   mode: 'dark',
   colors: {
-    background: '#1A1A1A',
-    text: '#E0E0E0',
-    border: '#3A3A3A',
+    background: '#0F172A',
+    text: '#E2E8F0',
+    border: '#334155',
     shadow: '#000000',
-    nodeBackground: '#2A2A2A',
-    nodeBorder: '#4A4A4A',
-    edgeStroke: '#999999',
-    edgeLabel: '#CCCCCC',
+    nodeBackground: '#1E293B',
+    nodeBorder: '#475569',
+    edgeStroke: '#94A3B8',
+    edgeLabel: '#E2E8F0',
   },
   spacing: {
     padding: 12,
@@ -93,10 +93,10 @@ const darkTheme: DiagramTheme = {
     lineHeight: 1.4,
   },
   shadow: {
-    blur: 8,
+    blur: 6,
     offsetX: 0,
-    offsetY: 4,
-    opacity: 0.3,
+    offsetY: 2,
+    opacity: 0.25,
   },
 };
 
@@ -200,25 +200,53 @@ export function generateThemeCSS(theme: DiagramTheme): string {
       color: ${colors.text};
     }
 
-    /* Target the shape children. A stroke on the group also paints the label
-       glyphs, which makes the text unreadable at a normal font size. */
+    /* Apply theme fill/stroke only when a node uses default CSS variables so
+       Mermaid classDef and inline node styles keep their explicit colors. */
     .node > rect,
     .node > circle,
     .node > ellipse,
     .node > polygon,
     .node > path {
-      fill: ${colors.nodeBackground};
-      stroke: ${colors.nodeBorder};
-      stroke-width: 1.5px;
       filter: drop-shadow(${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blur}px rgba(${shadowRgb}, ${shadow.opacity}));
     }
 
+    .node > rect[fill^="var("],
+    .node > circle[fill^="var("],
+    .node > ellipse[fill^="var("],
+    .node > polygon[fill^="var("],
+    .node > path[fill^="var("],
+    .node > rect:not([fill]),
+    .node > circle:not([fill]),
+    .node > ellipse:not([fill]),
+    .node > polygon:not([fill]),
+    .node > path:not([fill]) {
+      fill: ${colors.nodeBackground};
+    }
+
+    .node > rect[stroke^="var("],
+    .node > circle[stroke^="var("],
+    .node > ellipse[stroke^="var("],
+    .node > polygon[stroke^="var("],
+    .node > path[stroke^="var("],
+    .node > rect:not([stroke]),
+    .node > circle:not([stroke]),
+    .node > ellipse:not([stroke]),
+    .node > polygon:not([stroke]),
+    .node > path:not([stroke]) {
+      stroke: ${colors.nodeBorder};
+      stroke-width: 1.5px;
+    }
+
     .node text {
-      fill: ${colors.text};
       stroke: none;
       font-family: ${typography.fontFamily};
       font-size: ${typography.fontSize}px;
       font-weight: ${typography.fontWeight};
+    }
+
+    .node text[fill^="var("],
+    .node text:not([fill]) {
+      fill: ${colors.text};
     }
 
     .edgePath path {

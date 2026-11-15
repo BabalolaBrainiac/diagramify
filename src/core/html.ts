@@ -235,7 +235,7 @@ export function generateInteractiveHTML(
   // the web font, and every script is already inline.
   const fontImport = options.offlineMode
     ? '    /* Offline: system fonts only. The page makes no network request. */'
-    : "    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');";
+    : "    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');";
 
   const subgraphsHTML = layout.subgraphs.map(renderSubgraph).join('\n');
   const nodeCardsHTML = layout.nodes
@@ -309,21 +309,23 @@ ${fontImport}
       --panel-shadow:0 8px 24px rgba(0,0,0,0.4);
     }
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;transition:background 0.25s,color 0.25s;}
+    body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;transition:background 0.25s,color 0.25s;}
     .app{display:flex;flex-direction:column;height:100vh;}
-    .header{padding:12px 20px;background:var(--surface);box-shadow:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);display:flex;align-items:center;gap:12px;z-index:20;flex-wrap:wrap;}
-    .header h1{font-size:15px;font-weight:600;flex:1;letter-spacing:-0.01em;}
-    .header h1 .subtitle{font-weight:400;color:var(--text-muted);font-size:12px;margin-left:6px;}
-    .pill{padding:3px 10px;border-radius:99px;font-size:11px;font-weight:500;background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text-muted);}
+    .header{padding:10px 18px;min-height:52px;background:var(--surface);border-bottom:1px solid color-mix(in srgb,var(--text) 10%,transparent);display:flex;align-items:center;gap:10px;z-index:20;flex-wrap:wrap;}
+    .header h1{font-size:15px;font-weight:600;flex:1;min-width:0;letter-spacing:-0.01em;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+    .header h1 .subtitle{font-weight:500;color:var(--text-muted);font-size:12px;}
+    .pill{padding:3px 9px;border-radius:99px;font-size:11px;font-weight:500;letter-spacing:0.01em;background:color-mix(in srgb,var(--text) 8%,transparent);color:var(--text-muted);}
     .pill.active{background:var(--edge-color-active);color:white;}
-    .btn-group{display:flex;gap:4px;align-items:center;}
-    .btn-divider{width:1px;align-self:stretch;background:color-mix(in srgb,var(--text) 12%,transparent);margin:0 2px;}
-    button,select{padding:6px 12px;background:transparent;border:1px solid color-mix(in srgb,var(--text) 15%,transparent);color:var(--text);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit;transition:all 0.15s;}
-    button:hover,select:hover{background:color-mix(in srgb,var(--text) 8%,transparent);border-color:color-mix(in srgb,var(--text) 25%,transparent);}
+    .btn-group{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
+    .btn-divider{width:1px;height:20px;align-self:center;background:color-mix(in srgb,var(--text) 12%,transparent);margin:0 4px;}
+    button,select{height:30px;padding:0 10px;background:transparent;border:1px solid color-mix(in srgb,var(--text) 14%,transparent);color:var(--text);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:background 0.15s,border-color 0.15s,color 0.15s;}
+    button:hover,select:hover{background:color-mix(in srgb,var(--text) 6%,transparent);border-color:color-mix(in srgb,var(--text) 26%,transparent);}
+    button.active{background:color-mix(in srgb,var(--edge-color-active) 12%,transparent);border-color:color-mix(in srgb,var(--edge-color-active) 45%,transparent);color:var(--edge-color-active);}
     button.primary{background:var(--edge-color-active);border-color:var(--edge-color-active);color:white;}
-    button.primary:hover{filter:brightness(1.1);}
+    button.primary:hover{filter:brightness(1.08);}
     button:disabled{opacity:0.4;cursor:not-allowed;}
     select{padding-right:26px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;}
+    .btn-icon{width:13px;height:13px;flex-shrink:0;opacity:0.8;}
     .main{flex:1;display:flex;min-height:0;}
     .sidebar{width:220px;background:var(--surface);border-right:1px solid color-mix(in srgb,var(--text) 8%,transparent);padding:14px;overflow-y:auto;flex-shrink:0;position:relative;transition:width 0.2s,padding 0.2s,opacity 0.15s;}
     .sidebar.resizing{transition:none;}
@@ -332,7 +334,7 @@ ${fontImport}
     .sidebar h3:not(:first-child){margin-top:18px;}
     .sidebar-resize{width:6px;flex-shrink:0;position:relative;cursor:col-resize;background:transparent;transition:background 0.15s;}
     .sidebar-resize:hover{background:color-mix(in srgb,var(--edge-color-active) 30%,transparent);}
-    #sidebar-collapse-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:18px;height:34px;padding:0;margin:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;background:var(--surface);border:1px solid color-mix(in srgb,var(--text) 15%,transparent);box-shadow:var(--panel-shadow);color:var(--text-muted);z-index:15;}
+    #sidebar-collapse-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:38px;padding:0;margin:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;line-height:1;background:var(--surface);border:1px solid color-mix(in srgb,var(--text) 15%,transparent);box-shadow:var(--panel-shadow);color:var(--text-muted);z-index:15;}
     #sidebar-collapse-btn:hover{color:var(--text);border-color:color-mix(in srgb,var(--text) 30%,transparent);}
     .legend-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;font-size:12px;transition:background 0.12s,opacity 0.12s;}
     .legend-item:hover{background:color-mix(in srgb,var(--text) 5%,transparent);}
@@ -365,12 +367,12 @@ ${fontImport}
     .edge-group:hover .edge-label-bg, .edge-group:hover .edge-label-text, .edge-group.active .edge-label-bg, .edge-group.active .edge-label-text { opacity: 1; }
     .edges-svg.has-active .edge-group:not(.active) { opacity: 0.15; }
     /* Arrow marker inherits group color via currentColor */
-    .dfy-node{position:absolute;display:flex;flex-direction:row;align-items:center;gap:8px;min-width:70px;max-width:200px;width:max-content;padding:6px 10px;border-radius:6px;background:var(--surface);border:1px solid color-mix(in srgb,var(--brand,#999) 25%,transparent);border-left:3px solid var(--brand,#999);box-shadow:0 1px 3px rgba(0,0,0,0.04),0 2px 6px color-mix(in srgb,var(--brand,#999) 6%,transparent);transition:transform 0.1s ease,box-shadow 0.1s ease;cursor:grab;z-index:10;user-select:none;transform:translate(-50%,-50%);}
-    .dfy-node:hover{box-shadow:0 3px 10px rgba(0,0,0,0.08),0 6px 16px color-mix(in srgb,var(--brand,#999) 15%,transparent);z-index:20;transform:translate(-50%,calc(-50% - 2px));}
-    .dfy-node.dragging{cursor:grabbing;transition:none;z-index:100;opacity:0.9;box-shadow:0 8px 24px rgba(0,0,0,0.12);}
+    .dfy-node{position:absolute;display:flex;flex-direction:row;align-items:center;gap:8px;min-width:70px;max-width:200px;width:max-content;padding:6px 10px 6px 8px;border-radius:6px;background:var(--surface);border:1px solid color-mix(in srgb,var(--brand,#999) 32%,var(--subgraph-border));box-shadow:0 1px 2px rgba(0,0,0,0.05);transition:transform 0.1s ease,box-shadow 0.1s ease,border-color 0.1s ease;cursor:grab;z-index:10;user-select:none;transform:translate(-50%,-50%);}
+    .dfy-node:hover{border-color:color-mix(in srgb,var(--brand,#999) 60%,var(--edge-color-active));box-shadow:0 3px 10px rgba(0,0,0,0.08);z-index:20;transform:translate(-50%,calc(-50% - 2px));}
+    .dfy-node.dragging{cursor:grabbing;transition:none;z-index:100;opacity:0.92;box-shadow:0 8px 24px rgba(0,0,0,0.14);}
     .dfy-node.selected{outline:2px solid var(--edge-color-active);outline-offset:2px;}
     .dfy-subgraph.selected{outline:2px solid var(--edge-color-active);outline-offset:2px;}
-    .dfy-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+    .dfy-icon{width:22px;height:22px;border-radius:5px;background:color-mix(in srgb,var(--brand,#999) 10%,var(--bg));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
     .dfy-icon img,.dfy-icon svg{width:16px;height:16px;display:block;object-fit:contain;pointer-events:none;user-select:none;-webkit-user-drag:none;}
     html[data-theme="dark"] .dfy-icon-needs-contrast img,
     html[data-theme="tokyo-night"] .dfy-icon-needs-contrast img,
@@ -384,13 +386,14 @@ ${fontImport}
     .dfy-badge{display:none;}
     .dfy-node.dimmed,.dfy-node.edge-dimmed{opacity:1;filter:grayscale(100%);box-shadow:none;border-style:dashed;}
     .dfy-node.dimmed .dfy-label,.dfy-node.edge-dimmed .dfy-label{color:var(--text-muted);}
-    html[data-theme="dark"] .dfy-node,html[data-theme="tokyo-night"] .dfy-node,html[data-theme="nord"] .dfy-node,html[data-theme="catppuccin"] .dfy-node{border-color:color-mix(in srgb,var(--brand) 40%,transparent);border-left:3px solid var(--brand);}
+    html[data-theme="dark"] .dfy-node,html[data-theme="tokyo-night"] .dfy-node,html[data-theme="nord"] .dfy-node,html[data-theme="catppuccin"] .dfy-node{border-color:color-mix(in srgb,var(--brand) 42%,var(--subgraph-border));}
     html[data-theme="dark"] .dfy-label,html[data-theme="tokyo-night"] .dfy-label,html[data-theme="nord"] .dfy-label,html[data-theme="catppuccin"] .dfy-label{color:var(--text);}
-    .footer-tip{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:var(--surface);padding:8px 14px;border-radius:8px;box-shadow:var(--panel-shadow);font-size:11px;color:var(--text-muted);display:flex;gap:12px;align-items:center;z-index:30;}
-    kbd{padding:1px 6px;border-radius:3px;background:color-mix(in srgb,var(--text) 12%,transparent);font-family:inherit;font-size:10px;font-weight:600;color:var(--text);}
+    .footer-tip{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(8px);border:1px solid var(--subgraph-border);padding:6px 12px;border-radius:8px;box-shadow:var(--panel-shadow);font-size:11px;color:var(--text-muted);display:flex;gap:10px;align-items:center;white-space:nowrap;max-width:calc(100vw - 380px);overflow:hidden;z-index:30;}
+    kbd{padding:1px 6px;border-radius:4px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);background:color-mix(in srgb,var(--text) 8%,transparent);font-family:inherit;font-size:10px;font-weight:600;color:var(--text);}
   
     .dfy-search-wrap {
-      padding: 16px;
+      padding: 0 0 12px;
+      margin-bottom: 12px;
       border-bottom: 1px solid var(--subgraph-border);
     }
     .dfy-search-box {
@@ -462,8 +465,9 @@ ${fontImport}
       box-shadow: var(--panel-shadow);
       z-index: 2000;
       transform: translateX(100%);
-      transition: transform 0.3s ease;
-      padding: 24px;
+      transition: transform 0.25s ease;
+      padding: 24px 20px;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -473,10 +477,19 @@ ${fontImport}
     }
     .dfy-detail-close {
       position: absolute;
-      top: 16px; right: 16px;
-      background: none; border: none;
-      font-size: 24px; color: var(--text-muted);
+      top: 14px; right: 14px;
+      width: 30px; height: 30px;
+      padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      font-size: 18px; line-height: 1; color: var(--text-muted);
       cursor: pointer;
+    }
+    .dfy-detail-close:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 8%, transparent);
     }
     .dfy-detail-content {
       color: var(--text);
@@ -553,29 +566,29 @@ ${fontImport}
 <body>
   <div class="app">
     <div class="header">
-      <h1>${escapeHTML(title)} <span class="subtitle">— ${layout.nodes.length} services · ${layout.subgraphs.length} tiers</span></h1>
+      <h1>${escapeHTML(title)} <span class="subtitle">${layout.nodes.length} services · ${layout.subgraphs.length} tiers</span></h1>
       <span class="pill" id="theme-pill">${initialTheme}</span>
       <span class="pill" id="edit-pill" style="display:none">EDIT MODE</span>
       <span class="pill" id="snap-pill" style="display:none;background:var(--edge-color-active);color:#fff">SNAP ON</span>
       <div class="btn-group">
-        <button id="legend-btn" title="Toggle legend (L)">Legend</button>
-        <button id="edges-btn" title="Toggle all connections">Edges</button>
-        <button id="hide-btn" title="Hide selected element (H)" disabled>Hide</button>
-        <button id="edit-btn" title="Edit labels (E)">Edit</button>
-        <button id="theme-btn" title="Cycle theme (T)">Theme</button>
-        <button id="layout-btn" title="Reset layout to original (Alt+R)">Auto-layout</button>
+        <button id="legend-btn" title="Toggle sidebar (L)"><svg class="btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2.5" width="4.5" height="11" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="2.5" width="5.5" height="11" rx="1" stroke="currentColor" stroke-width="1.3"/></svg>Legend</button>
+        <button id="edges-btn" title="Toggle connections"><svg class="btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 12L13 4M13 4H8M13 4V9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Edges</button>
+        <button id="hide-btn" title="Hide selected element (H)" disabled><svg class="btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 8s2.2-4 6-4 6 4 6 4-2.2 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.3"/><path d="M3 13L13 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Hide</button>
+        <button id="edit-btn" title="Edit labels (E)"><svg class="btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11.2 2.8l2 2L5.5 12.5H3.5v-2l7.7-7.7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>Edit</button>
+        <button id="theme-btn" title="Cycle theme (T)"><svg class="btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Theme</button>
+        <button id="layout-btn" title="Reset layout (Alt+R)"><svg class="btn-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="9.5" y="2.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="5.8" y="9.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.3"/></svg>Auto-layout</button>
         <span class="btn-divider"></span>
-        <select id="format-select" title="Export">
-          <option value="">Export…</option>
+        <select id="format-select" title="Export diagram">
+          <option value="">Export...</option>
           <optgroup label="Image">
-            <option value="png">PNG (4×)</option>
+            <option value="png">PNG (4x)</option>
             <option value="svg">SVG</option>
             <option value="jpeg">JPEG</option>
           </optgroup>
           <optgroup label="Source">
             <option value="mmd">Mermaid (.mmd)</option>
-            ${editableGraph ? '<option value="mmd-live">Mermaid — with edits (.mmd)</option>' : ''}
-            ${editableGraph ? '<option value="ir-live">Architecture IR — with edits (.json)</option>' : ''}
+            ${editableGraph ? '<option value="mmd-live">Edited Mermaid (.mmd)</option>' : ''}
+            ${editableGraph ? '<option value="ir-live">Edited Graph IR (.json)</option>' : ''}
           </optgroup>
           <optgroup label="Light theme">
             <option value="png:light">PNG</option>
@@ -590,7 +603,7 @@ ${fontImport}
             <option value="pdf:dark">PDF</option>
           </optgroup>
         </select>
-        <button class="primary" id="reset-btn" title="Reset zoom/pan (R)">Reset</button>
+        <button class="primary" id="reset-btn" title="Reset view (R)">Reset</button>
       </div>
     </div>
     <div class="main">
@@ -609,10 +622,6 @@ ${fontImport}
         <div class="legend-item"><span class="legend-line dashed"></span><span class="legend-label">Async / Event</span><span class="legend-detail">Queue / pub-sub</span></div>
         ${options.showLayerPanel !== false ? `<div id="layer-panel"><h3>Layers</h3>
         <div id="layer-list" style="font-size:12px;"></div></div>` : ''}
-        <h3>Interactions</h3>
-        <div class="legend-item"><span class="legend-label">Click Legend</span><span class="legend-detail">toggle type filter</span></div>
-        <div class="legend-item"><span class="legend-label">Drag</span><span class="legend-detail">card → reposition</span></div>
-        <div class="legend-item"><span class="legend-label">Edit mode</span><span class="legend-detail">click label</span></div>
       </aside>
       <div class="sidebar-resize" id="sidebar-resize">
         <button id="sidebar-collapse-btn" type="button" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
@@ -633,13 +642,12 @@ ${fontImport}
       </div>
     </div>
     <div class="footer-tip">
-      <span><kbd>T</kbd> theme</span>
-      <span><kbd>E</kbd> edit</span>
-      <span><kbd>L</kbd> legend</span>
-      <span><kbd>Del</kbd> remove node</span>
-      <span><kbd>H</kbd> hide</span>
-      <span><kbd>⇧H</kbd> show all</span>
-      <span>Drag cards · click label in edit mode</span>
+      <span><kbd>T</kbd> Theme</span>
+      <span><kbd>E</kbd> Edit</span>
+      <span><kbd>L</kbd> Legend</span>
+      <span><kbd>H</kbd> Hide</span>
+      <span><kbd>⇧H</kbd> Show all</span>
+      <span><kbd>Del</kbd> Remove</span>
     </div>
   </div>
   <!-- The panels must precede the script. The script looks them up on the

@@ -140,24 +140,40 @@ export function generateDiffHTML(
   diff: DiagramDiff,
   beforeSvg: string,
   afterSvg: string,
-  _options?: { theme?: string }
+  options?: { theme?: string }
 ): string {
-  // Simple side by side
+  const dark = options?.theme === 'dark';
   return `<!DOCTYPE html>
-<html>
+<html lang="en"${dark ? ' data-theme="dark"' : ''}>
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture Diff</title>
   <style>
-    body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; }
-    .header { padding: 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; }
-    .stats span { margin-right: 16px; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-    .stats .added { background: #d1fae5; color: #047857; }
-    .stats .removed { background: #ffe4e6; color: #be123c; }
-    .stats .unchanged { background: #f1f5f9; color: #475569; }
-    .container { display: flex; flex: 1; overflow: hidden; }
-    .panel { flex: 1; border-right: 1px solid #e2e8f0; position: relative; }
-    .panel-title { position: absolute; top: 16px; left: 16px; background: white; padding: 8px 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 4px; font-weight: bold; }
-    .svg-container { width: 100%; height: 100%; overflow: auto; }
-    .svg-container svg { width: 100%; height: 100%; }
+    :root {
+      --bg: #f8fafc; --surface: #ffffff; --text: #0f172a; --muted: #475569; --border: #e2e8f0;
+      --add-bg: #dcfce7; --add-fg: #166534; --rem-bg: #fee2e2; --rem-fg: #991b1b;
+    }
+    html[data-theme="dark"] {
+      --bg: #0a0a0f; --surface: #15151f; --text: #e2e8f0; --muted: #94a3b8; --border: #27273a;
+      --add-bg: rgba(34,197,94,0.16); --add-fg: #86efac; --rem-bg: rgba(239,68,68,0.16); --rem-fg: #fca5a5;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; }
+    .header { padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .header h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stats span { padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+    .stats .added { background: var(--add-bg); color: var(--add-fg); }
+    .stats .removed { background: var(--rem-bg); color: var(--rem-fg); }
+    .stats .unchanged { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--muted); }
+    .container { display: flex; flex: 1; min-height: 0; }
+    .panel { flex: 1; min-width: 0; border-right: 1px solid var(--border); position: relative; display: flex; flex-direction: column; }
+    .panel:last-child { border-right: none; }
+    .panel-title { padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .svg-container { flex: 1; overflow: auto; padding: 16px; }
+    .svg-container svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+    @media (max-width: 768px) { .container { flex-direction: column; } .panel { border-right: none; border-bottom: 1px solid var(--border); } }
   </style>
 </head>
 <body>
