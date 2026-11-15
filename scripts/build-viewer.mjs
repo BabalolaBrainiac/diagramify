@@ -12,6 +12,27 @@ export async function buildViewer(watch = false) {
         const path = 'src/viewer/session.generated.ts';
         if (await readFile(path, 'utf8').catch(() => '') !== output) await writeFile(path, output);
       });
+    } }, { name: 'drop-zod-json-schema', setup(builder) {
+      // The viewer runtime never converts schemas to JSON Schema. Stubbing these
+      // zod modules keeps their $schema URL constants and dead weight out of the
+      // offline viewer bundle. Calling the stubbed APIs fails loudly.
+      const thrower = name => `() => { throw new Error('${name} is excluded from the Diagramify viewer bundle.'); }`;
+      const stubs = {
+        'to-json-schema.js': [
+          'createToJSONSchemaMethod', 'createStandardJSONSchemaMethod',
+          'extractDefs', 'finalize', 'initializeContext', 'processSchema', 'handleUnrepresentable',
+        ],
+        'from-json-schema.js': ['fromJSONSchema'],
+      };
+      builder.onResolve({ filter: /(to|from)-json-schema\.js$/ }, args => {
+        if (!args.importer.includes('node_modules/zod')) return undefined;
+        return { path: args.path, namespace: 'zod-json-schema-stub' };
+      });
+      builder.onLoad({ filter: /.*/, namespace: 'zod-json-schema-stub' }, args => {
+        const key = Object.keys(stubs).find(suffix => args.path.endsWith(suffix));
+        const contents = stubs[key].map(name => `export const ${name} = ${thrower('zod.' + name)};`).join('\n');
+        return { contents, loader: 'js' };
+      });
     } }] };
   if (!watch) { await build(options); return; }
   const builder = await context(options);
