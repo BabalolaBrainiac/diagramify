@@ -7,13 +7,14 @@ import { previewCommand } from './commands/preview.js';
 import { watchCommand } from './commands/watch.js';
 import { makeDiffCommand } from './commands/diff.js';
 import { makeCICommand } from './commands/ci.js';
+import { makePrCommand } from './commands/pr.js';
 import { checkCommand } from './commands/check.js';
 import { modelsCommand } from './commands/models.js';
 
 program
   .name('diagramify')
   .description('Architecture mapping and rendering engine')
-  .version('0.3.0');
+  .version('0.5.1');
 
 program.addCommand(generateCommand);
 program.addCommand(renderCommand);
@@ -22,6 +23,7 @@ program.addCommand(watchCommand);
 program.addCommand(initCommand);
 program.addCommand(makeDiffCommand());
 program.addCommand(makeCICommand());
+program.addCommand(makePrCommand());
 program.addCommand(checkCommand);
 program.addCommand(modelsCommand);
 

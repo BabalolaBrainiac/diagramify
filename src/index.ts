@@ -59,6 +59,28 @@ export { svgToPDF } from './core/export/pdf.js';
 export { graphToDrawio, graphToExcalidraw } from './core/export/editable.js';
 export { compareGraphs, formatDriftReport } from './core/drift.js';
 export type { DriftReport, EdgeChange, NodeChange } from './core/drift.js';
+export {
+  PR_SECTION_START,
+  PR_SECTION_END,
+  buildPrMermaidArchDiff,
+  buildPrMermaidStateDiff,
+  diffStateMachines,
+  extractStateMachinesFromSources,
+  generatePrSummaryMarkdown,
+  mergePrDescriptionBody,
+  parseChangedFiles,
+  runPrDiff,
+} from './core/pr-diff.js';
+export type {
+  PrDiffMode,
+  PrDiffRunResult,
+  PrFileChange,
+  PrImpactReport,
+  RunPrDiffOptions,
+  StateMachineDiff,
+  StateMachineSnapshot,
+  StateTransition,
+} from './core/pr-diff.js';
 
 export { collectEvidence, summarizeEvidence, environmentNames } from './core/evidence.js';
 export type { Evidence } from './core/evidence.js';
